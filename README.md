@@ -59,3 +59,16 @@ cleanup := block.SetCallback(sensor.StateInactive, func(id sensor.ID, state sens
 
 defer cleanup()
 ```
+
+## Direct console access
+
+In case you just want to get access to the console for reading and writing native commands
+setup a console:
+
+```go
+commandC, writeF, cleanupF := controller.Console()
+defer cleanupF()
+```
+
+Ingress commands can be consumed from the `commandC` channel.
+New commands can be sent using the `writeF` function.
