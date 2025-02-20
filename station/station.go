@@ -9,8 +9,8 @@ type PowerState command.OpCode
 type Track string
 
 const (
-	PowerOff PowerState = '0'
-	PowerOn  PowerState = '1'
+	PowerOff PowerState = "0"
+	PowerOn  PowerState = "1"
 )
 
 const (
@@ -31,6 +31,11 @@ func NewStation(protocol protocol.ReadWriteCloser) *CommandStation {
 
 func (s PowerState) OpCode() command.OpCode {
 	return command.OpCode(s)
+}
+
+func (c *CommandStation) Console() (protocol.CommandC, protocol.WriteF, protocol.CleanupF) {
+	commandC, cleanupF := c.protocol.Read()
+	return commandC, c.protocol.Write, cleanupF
 }
 
 func (c *CommandStation) Power(state PowerState) error {
