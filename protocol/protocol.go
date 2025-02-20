@@ -13,20 +13,24 @@ import (
 
 type Observation struct{}
 type ObservationsC chan Observation
+type CommandC chan *command.Command
+type WriteF func(*command.Command) error
 type CleanupF func()
 
 type Protocol struct {
-	port              serial.Port
-	reader            func()
-	subscriptions     map[string]map[string]chan bool
-	listenerExit      chan bool
-	subscriptionLock  sync.Mutex
-	writeLock         sync.Mutex
-	exclusiveReadLock sync.Mutex
+	port                     serial.Port
+	subscriptions            map[string]CommandC
+	commandSubscriptions     map[string]map[string]ObservationsC
+	listenerExit             chan bool
+	subscriptionLock         sync.Mutex
+	commandSubscriptionsLock sync.Mutex
+	writeLock                sync.Mutex
+	exclusiveReadLock        sync.Mutex
 }
 
 type Reader interface {
-	Read(command *command.Command) (ObservationsC, CleanupF)
+	Read() (CommandC, CleanupF)
+	ReadCommand(command *command.Command) (ObservationsC, CleanupF)
 	ReadExclusive(command *command.Command) (ObservationsC, CleanupF)
 }
 
@@ -46,9 +50,10 @@ type ReadWriteCloser interface {
 
 func NewProtocol(port serial.Port) *Protocol {
 	protocol := &Protocol{
-		port:          port,
-		subscriptions: make(map[string]map[string]chan bool),
-		listenerExit:  make(chan bool),
+		port:                 port,
+		subscriptions:        make(map[string]CommandC),
+		commandSubscriptions: make(map[string]map[string]ObservationsC),
+		listenerExit:         make(chan bool),
 	}
 
 	go protocol.listen()
@@ -71,47 +76,118 @@ func (p *Protocol) listen() {
 		// Check if the read string contains a newline in which case
 		// the command got fully read and we can continue.
 		bufStr += string(buf[:n])
-		if strings.Contains(bufStr, "\n") {
-			command, _ := command.ParseRaw(bufStr)
+
+		// A command might be built from several read operations.
+		// Also multiple commands could be read in a single operation.
+		// Iterate over the bufStr as long as it contains a newline.
+		for strings.Contains(bufStr, "\n") {
+			// Cut the first command.
+			// The next loop will potentially cut off the next command.
+			// Therefore only split the string once.
+			split := strings.SplitN(bufStr, "\n", 2)
+			command, _ := command.NewCommandFromString(split[0])
+
+			p.commandSubscriptionsLock.Lock()
+			for _, subscriberC := range p.commandSubscriptions[split[0]] {
+				subscriberC <- struct{}{}
+			}
+
+			p.commandSubscriptionsLock.Unlock()
 
 			p.subscriptionLock.Lock()
-			for _, subscriber := range p.subscriptions[command] {
-				// Try to write non blocking.
-				select {
-				case subscriber <- true:
-				default:
-				}
+			for _, subscriberC := range p.subscriptions {
+				subscriberC <- command
 			}
 
 			p.subscriptionLock.Unlock()
-			bufStr = ""
+
+			// Append the remainder of the string to be checked
+			// in the next iteration.
+			bufStr = split[1]
 		}
 	}
 }
 
-func (p *Protocol) Read(command *command.Command) (ObservationsC, CleanupF) {
-	commandStr := command.StringRaw()
+func (p *Protocol) Read() (CommandC, CleanupF) {
+	// In order to easily identify the caller in the subscription map create an UUID.
+	uuid := uuid.NewString()
+
+	p.subscriptionLock.Lock()
+
+	// Create the caller's subscription channel and insert it into the map.
+	subscription := make(CommandC)
+	p.subscriptions[uuid] = subscription
+	p.subscriptionLock.Unlock()
+
+	commandC := make(CommandC)
+
+	// Create a new context to allow cancellation of the routine.
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case command := <-subscription:
+				// Send the command to the caller
+				commandC <- command
+			case <-ctx.Done():
+				// Initiate cleanup as requested by the caller.
+				return
+			}
+		}
+	}()
+
+	// The cleanup function is returned to the caller and ensures the
+	// routine has returned, the channels are closed and the subscription is removed.
+	cleanup := func() {
+		// Cancels the routine.
+		cancel()
+		wg.Wait()
+
+		// Close the returned observation channel.
+		// The routine cannot anymore write to it as it has already returned.
+		close(commandC)
+
+		p.subscriptionLock.Lock()
+		// Now the subscription channel can also be closed.
+		// This can only be done after obtaining the lock to protect the listener
+		// from writing to a closed subscription channel.
+		close(subscription)
+
+		delete(p.subscriptions, uuid)
+		p.subscriptionLock.Unlock()
+	}
+
+	return commandC, cleanup
+}
+
+func (p *Protocol) ReadCommand(command *command.Command) (ObservationsC, CleanupF) {
+	commandStr := command.String()
 
 	// Create a map for subscriptions specific to the given command in case it doesn't yet exist.
-	p.subscriptionLock.Lock()
-	_, ok := p.subscriptions[commandStr]
+	p.commandSubscriptionsLock.Lock()
+	_, ok := p.commandSubscriptions[commandStr]
 	if !ok {
-		p.subscriptions[commandStr] = make(map[string]chan bool)
+		p.commandSubscriptions[commandStr] = make(map[string]ObservationsC)
 	}
 
 	// In order to easily identify the caller in the subscription map create an UUID.
 	uuid := uuid.NewString()
 
 	// Create the caller's subscription channel and insert it into the pool.
-	subscription := make(chan bool)
-	commandSubscriptions := p.subscriptions[commandStr]
+	subscription := make(ObservationsC)
+	commandSubscriptions := p.commandSubscriptions[commandStr]
 	commandSubscriptions[uuid] = subscription
-	p.subscriptions[commandStr] = commandSubscriptions
-	p.subscriptionLock.Unlock()
+	p.commandSubscriptions[commandStr] = commandSubscriptions
+	p.commandSubscriptionsLock.Unlock()
 
 	// Create the channel returned to the caller which receives messages
 	// in case the subscribed command got observed.
-	observed := make(ObservationsC)
+	observedC := make(ObservationsC)
 
 	// Create a new context to allow cancellation of the routine.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -125,10 +201,9 @@ func (p *Protocol) Read(command *command.Command) (ObservationsC, CleanupF) {
 			select {
 			case <-subscription:
 				// Notify the caller that the command was observed.
-				observed <- struct{}{}
+				observedC <- struct{}{}
 			case <-ctx.Done():
 				// Initiate cleanup as requested by the caller.
-				close(observed)
 				return
 			}
 		}
@@ -137,26 +212,32 @@ func (p *Protocol) Read(command *command.Command) (ObservationsC, CleanupF) {
 	// The cleanup function is returned to the caller and ensures the
 	// routine has returned, the channels are closed and the subscription is removed.
 	cleanup := func() {
-		// Cancels the routine which causes the observation channel to be closed too.
+		// Cancels the routine.
 		cancel()
 		wg.Wait()
 
+		// Close the returned observation channel.
+		// The routine cannot anymore write to it as it has already returned.
+		close(observedC)
+
+		p.commandSubscriptionsLock.Lock()
 		// Now the subscription channel can also be closed.
+		// This can only be done after obtaining the lock to protect the listener
+		// from writing to a closed subscription channel.
 		close(subscription)
 
-		p.subscriptionLock.Lock()
-		delete(p.subscriptions[commandStr], uuid)
-		p.subscriptionLock.Unlock()
+		delete(p.commandSubscriptions[commandStr], uuid)
+		p.commandSubscriptionsLock.Unlock()
 	}
 
-	return observed, cleanup
+	return observedC, cleanup
 }
 
 // TODO: not really exclusive if there are already callers on Read()
 func (p *Protocol) ReadExclusive(command *command.Command) (ObservationsC, CleanupF) {
 	// Acquire the exclusive read lock
 	p.exclusiveReadLock.Lock()
-	observationsC, cleanupF := p.Read(command)
+	observationsC, cleanupF := p.ReadCommand(command)
 	return observationsC, func() {
 		cleanupF()
 
