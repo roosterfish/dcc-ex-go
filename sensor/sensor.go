@@ -12,8 +12,8 @@ type ID uint16
 type State command.OpCode
 
 const (
-	StateActive   State = 'Q'
-	StateInactive State = 'q'
+	StateActive   State = "Q"
+	StateInactive State = "q"
 )
 
 type Sensor struct {
@@ -33,7 +33,7 @@ func NewSensor(id ID, protocol protocol.ReadWriteCloser) *Sensor {
 }
 
 func (s *Sensor) Wait(ctx context.Context, state State) error {
-	observed, cleanup := s.protocol.Read(command.NewCommand(state.OpCode(), "%d", s.id))
+	observed, cleanup := s.protocol.ReadCommand(command.NewCommand(state.OpCode(), "%d", s.id))
 	defer cleanup()
 
 	select {
@@ -45,7 +45,7 @@ func (s *Sensor) Wait(ctx context.Context, state State) error {
 }
 
 func (s *Sensor) Watch(state State) (protocol.ObservationsC, protocol.CleanupF) {
-	return s.protocol.Read(command.NewCommand(state.OpCode(), "%d", s.id))
+	return s.protocol.ReadCommand(command.NewCommand(state.OpCode(), "%d", s.id))
 }
 
 func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.CleanupF {
