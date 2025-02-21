@@ -102,7 +102,7 @@ func (p *Protocol) listen() {
 
 			p.commandSubscriptionsLock.Lock()
 			for _, subscriberC := range p.commandSubscriptions[split[0]] {
-				subscriberC <- struct{}{}
+				subscriberC <- Observation{}
 			}
 
 			p.commandSubscriptionsLock.Unlock()
@@ -210,7 +210,7 @@ func (p *Protocol) ReadCommand(command *command.Command) (ObservationsC, Cleanup
 			select {
 			case <-subscription:
 				// Notify the caller that the command was observed.
-				observedC <- struct{}{}
+				observedC <- Observation{}
 			case <-ctx.Done():
 				// Initiate cleanup as requested by the caller.
 				return
@@ -261,7 +261,7 @@ func (p *Protocol) Write(command *command.Command) error {
 
 	_, err := p.port.Write(command.Bytes())
 	if errors.Is(err, unix.EBADF) {
-		return fmt.Errorf("Connection is closed")
+		return fmt.Errorf("Serial port is closed")
 	}
 
 	return err
@@ -270,7 +270,7 @@ func (p *Protocol) Write(command *command.Command) error {
 func (p *Protocol) Close() error {
 	err := p.port.Close()
 	if err != nil {
-		return fmt.Errorf("Failed to close protocol: %w", err)
+		return fmt.Errorf("Failed to close serial port: %w", err)
 	}
 
 	<-p.listenerExit
