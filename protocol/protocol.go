@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/roosterfish/dcc-ex-go/command"
 	"go.bug.st/serial"
+	"golang.org/x/sys/unix"
 )
 
 type Observation struct{}
@@ -85,7 +87,18 @@ func (p *Protocol) listen() {
 			// The next loop will potentially cut off the next command.
 			// Therefore only split the string once.
 			split := strings.SplitN(bufStr, "\n", 2)
-			command, _ := command.NewCommandFromString(split[0])
+			if len(split) != 2 {
+				continue
+			}
+
+			// Append the remainder of the string to be checked
+			// in the next iteration.
+			bufStr = split[1]
+
+			command, err := command.NewCommandFromString(split[0])
+			if err != nil {
+				continue
+			}
 
 			p.commandSubscriptionsLock.Lock()
 			for _, subscriberC := range p.commandSubscriptions[split[0]] {
@@ -100,10 +113,6 @@ func (p *Protocol) listen() {
 			}
 
 			p.subscriptionLock.Unlock()
-
-			// Append the remainder of the string to be checked
-			// in the next iteration.
-			bufStr = split[1]
 		}
 	}
 }
@@ -251,6 +260,10 @@ func (p *Protocol) Write(command *command.Command) error {
 	defer p.writeLock.Unlock()
 
 	_, err := p.port.Write(command.Bytes())
+	if errors.Is(err, unix.EBADF) {
+		return fmt.Errorf("Connection is closed")
+	}
+
 	return err
 }
 
