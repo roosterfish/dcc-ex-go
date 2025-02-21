@@ -27,13 +27,11 @@ type Protocol struct {
 	subscriptionLock         sync.Mutex
 	commandSubscriptionsLock sync.Mutex
 	writeLock                sync.Mutex
-	exclusiveReadLock        sync.Mutex
 }
 
 type Reader interface {
 	Read() (CommandC, CleanupF)
 	ReadCommand(command *command.Command) (ObservationsC, CleanupF)
-	ReadExclusive(command *command.Command) (ObservationsC, CleanupF)
 }
 
 type Writer interface {
@@ -240,19 +238,6 @@ func (p *Protocol) ReadCommand(command *command.Command) (ObservationsC, Cleanup
 	}
 
 	return observedC, cleanup
-}
-
-// TODO: not really exclusive if there are already callers on Read()
-func (p *Protocol) ReadExclusive(command *command.Command) (ObservationsC, CleanupF) {
-	// Acquire the exclusive read lock
-	p.exclusiveReadLock.Lock()
-	observationsC, cleanupF := p.ReadCommand(command)
-	return observationsC, func() {
-		cleanupF()
-
-		// Release the exclusive read lock only after the caller cleaned up.
-		p.exclusiveReadLock.Unlock()
-	}
 }
 
 func (p *Protocol) Write(command *command.Command) error {
