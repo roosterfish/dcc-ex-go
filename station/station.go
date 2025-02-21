@@ -1,6 +1,10 @@
 package station
 
 import (
+	"context"
+	"fmt"
+	"strconv"
+
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
 )
@@ -44,4 +48,30 @@ func (c *CommandStation) Power(state PowerState) error {
 
 func (c *CommandStation) PowerTrack(state PowerState, track Track) error {
 	return c.protocol.Write(command.NewCommand(state.OpCode(), "%s", track))
+}
+
+func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
+	commandC, cleanupF := c.protocol.ReadOpCode("#")
+	defer cleanupF()
+
+	go func() {
+		_ = c.protocol.Write(command.NewCommand("#", ""))
+	}()
+
+	select {
+	case cmd := <-commandC:
+		parameters := cmd.Parameters()
+		if len(parameters) != 1 {
+			return 0, fmt.Errorf("Invalid command: %q", cmd.String())
+		}
+
+		supportedCabs, err := strconv.Atoi(parameters[0].(string))
+		if err != nil {
+			return 0, fmt.Errorf("Failed to cast supported cabs to int: %w", err)
+		}
+
+		return supportedCabs, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
 }

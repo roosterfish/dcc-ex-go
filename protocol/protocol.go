@@ -23,15 +23,18 @@ type Protocol struct {
 	port                     serial.Port
 	subscriptions            map[string]CommandC
 	commandSubscriptions     map[string]map[string]ObservationsC
+	opCodeSubscriptions      map[string]map[string]CommandC
 	listenerExit             chan bool
 	subscriptionLock         sync.Mutex
 	commandSubscriptionsLock sync.Mutex
+	opCodeSubscriptionsLock  sync.Mutex
 	writeLock                sync.Mutex
 }
 
 type Reader interface {
 	Read() (CommandC, CleanupF)
 	ReadCommand(command *command.Command) (ObservationsC, CleanupF)
+	ReadOpCode(opCode command.OpCode) (CommandC, CleanupF)
 }
 
 type Writer interface {
@@ -53,6 +56,7 @@ func NewProtocol(port serial.Port) *Protocol {
 		port:                 port,
 		subscriptions:        make(map[string]CommandC),
 		commandSubscriptions: make(map[string]map[string]ObservationsC),
+		opCodeSubscriptions:  make(map[string]map[string]CommandC),
 		listenerExit:         make(chan bool),
 	}
 
@@ -104,6 +108,13 @@ func (p *Protocol) listen() {
 			}
 
 			p.commandSubscriptionsLock.Unlock()
+
+			p.opCodeSubscriptionsLock.Lock()
+			for _, subscriberC := range p.opCodeSubscriptions[string(command.OpCode())] {
+				subscriberC <- command
+			}
+
+			p.opCodeSubscriptionsLock.Unlock()
 
 			p.subscriptionLock.Lock()
 			for _, subscriberC := range p.subscriptions {
@@ -238,6 +249,74 @@ func (p *Protocol) ReadCommand(command *command.Command) (ObservationsC, Cleanup
 	}
 
 	return observedC, cleanup
+}
+
+func (p *Protocol) ReadOpCode(opCode command.OpCode) (CommandC, CleanupF) {
+	opCodeStr := string(opCode)
+
+	// Create a map for subscriptions specific to the given command in case it doesn't yet exist.
+	p.opCodeSubscriptionsLock.Lock()
+	_, ok := p.opCodeSubscriptions[opCodeStr]
+	if !ok {
+		p.opCodeSubscriptions[opCodeStr] = make(map[string]CommandC)
+	}
+
+	// In order to easily identify the caller in the subscription map create an UUID.
+	uuid := uuid.NewString()
+
+	// Create the caller's subscription channel and insert it into the pool.
+	subscription := make(CommandC)
+	opCodeSubscriptions := p.opCodeSubscriptions[opCodeStr]
+	opCodeSubscriptions[uuid] = subscription
+	p.opCodeSubscriptions[opCodeStr] = opCodeSubscriptions
+	p.opCodeSubscriptionsLock.Unlock()
+
+	// Create the channel returned to the caller which receives messages
+	// in case the subscribed command got observed.
+	commandC := make(CommandC)
+
+	// Create a new context to allow cancellation of the routine.
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case command := <-subscription:
+				// Notify the caller that the command was observed.
+				commandC <- command
+			case <-ctx.Done():
+				// Initiate cleanup as requested by the caller.
+				return
+			}
+		}
+	}()
+
+	// The cleanup function is returned to the caller and ensures the
+	// routine has returned, the channels are closed and the subscription is removed.
+	cleanup := func() {
+		// Cancels the routine.
+		cancel()
+		wg.Wait()
+
+		// Close the returned observation channel.
+		// The routine cannot anymore write to it as it has already returned.
+		close(commandC)
+
+		p.opCodeSubscriptionsLock.Lock()
+		// Now the subscription channel can also be closed.
+		// This can only be done after obtaining the lock to protect the listener
+		// from writing to a closed subscription channel.
+		close(subscription)
+
+		delete(p.opCodeSubscriptions[opCodeStr], uuid)
+		p.opCodeSubscriptionsLock.Unlock()
+	}
+
+	return commandC, cleanup
 }
 
 func (p *Protocol) Write(command *command.Command) error {

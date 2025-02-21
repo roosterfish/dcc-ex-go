@@ -63,3 +63,11 @@ func (c *Command) String() string {
 func (c *Command) Bytes() []byte {
 	return []byte(fmt.Sprintf("%s\n", c.String()))
 }
+
+func (c *Command) OpCode() OpCode {
+	return c.opCode
+}
+
+func (c *Command) Parameters() []any {
+	return c.parameters
+}
