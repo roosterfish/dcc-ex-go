@@ -12,8 +12,8 @@ type ID uint16
 type State command.OpCode
 
 const (
-	StateActive   State = "Q"
-	StateInactive State = "q"
+	StateActive   State = 'Q'
+	StateInactive State = 'q'
 )
 
 type Sensor struct {
