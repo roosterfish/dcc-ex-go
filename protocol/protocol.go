@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -68,7 +67,36 @@ func (p *Protocol) listen() {
 	// The protocol's Close is waiting for the channel to be closed.
 	defer close(p.listenerExit)
 
-	bufStr := ""
+	notifyF := func(stringCommand string) {
+		command, err := command.NewCommandFromString(stringCommand)
+		if err != nil {
+			return
+		}
+
+		p.commandSubscriptionsLock.Lock()
+		for _, subscriberC := range p.commandSubscriptions[command.String()] {
+			subscriberC <- Observation{}
+		}
+
+		p.commandSubscriptionsLock.Unlock()
+
+		p.opCodeSubscriptionsLock.Lock()
+		for _, subscriberC := range p.opCodeSubscriptions[string(command.OpCode())] {
+			subscriberC <- command
+		}
+
+		p.opCodeSubscriptionsLock.Unlock()
+
+		p.subscriptionLock.Lock()
+		for _, subscriberC := range p.subscriptions {
+			subscriberC <- command
+		}
+
+		p.subscriptionLock.Unlock()
+	}
+
+	commandRunes := []rune{}
+	commandReading := false
 	buf := make([]byte, 100)
 	for {
 		n, err := p.port.Read(buf)
@@ -76,52 +104,30 @@ func (p *Protocol) listen() {
 			return
 		}
 
-		// Not every read operation contains already the full command.
-		// Check if the read string contains a newline in which case
-		// the command got fully read and we can continue.
-		bufStr += string(buf[:n])
-
-		// A command might be built from several read operations.
-		// Also multiple commands could be read in a single operation.
-		// Iterate over the bufStr as long as it contains a newline.
-		for strings.Contains(bufStr, "\n") {
-			// Cut the first command.
-			// The next loop will potentially cut off the next command.
-			// Therefore only split the string once.
-			split := strings.SplitN(bufStr, "\n", 2)
-			if len(split) != 2 {
+		for _, receivedByte := range buf[:n] {
+			// The parsing of the commands is implemented according to
+			// https://dcc-ex.com/reference/developers/api.html#appendix-b-suggested-parameter-parsing-sequence.
+			receivedRune := rune(receivedByte)
+			if receivedRune == '<' {
+				commandReading = true
 				continue
 			}
 
-			// Append the remainder of the string to be checked
-			// in the next iteration.
-			bufStr = split[1]
+			if receivedRune == '>' {
+				notifyF(string(commandRunes))
 
-			command, err := command.NewCommandFromString(split[0])
-			if err != nil {
+				commandReading = false
+				commandRunes = []rune{}
+			}
+
+			// Filter out newlines.
+			if receivedRune == '\n' {
 				continue
 			}
 
-			p.commandSubscriptionsLock.Lock()
-			for _, subscriberC := range p.commandSubscriptions[split[0]] {
-				subscriberC <- Observation{}
+			if commandReading {
+				commandRunes = append(commandRunes, receivedRune)
 			}
-
-			p.commandSubscriptionsLock.Unlock()
-
-			p.opCodeSubscriptionsLock.Lock()
-			for _, subscriberC := range p.opCodeSubscriptions[string(command.OpCode())] {
-				subscriberC <- command
-			}
-
-			p.opCodeSubscriptionsLock.Unlock()
-
-			p.subscriptionLock.Lock()
-			for _, subscriberC := range p.subscriptions {
-				subscriberC <- command
-			}
-
-			p.subscriptionLock.Unlock()
 		}
 	}
 }
