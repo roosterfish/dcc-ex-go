@@ -13,8 +13,8 @@ type PowerState command.OpCode
 type Track string
 
 const (
-	PowerOff PowerState = "0"
-	PowerOn  PowerState = "1"
+	PowerOff PowerState = '0'
+	PowerOn  PowerState = '1'
 )
 
 const (
@@ -51,11 +51,11 @@ func (c *CommandStation) PowerTrack(state PowerState, track Track) error {
 }
 
 func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
-	commandC, cleanupF := c.protocol.ReadOpCode("#")
+	commandC, cleanupF := c.protocol.ReadOpCode(command.OpCodeStationSupportedCabs)
 	defer cleanupF()
 
 	go func() {
-		_ = c.protocol.Write(command.NewCommand("#", ""))
+		_ = c.protocol.Write(command.NewCommand(command.OpCodeStationSupportedCabs, ""))
 	}()
 
 	select {
