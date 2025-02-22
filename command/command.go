@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -46,20 +47,54 @@ func NewCommandFromString(command string) (*Command, error) {
 	// Trim unwanted whitespaces from left and right.
 	commandWithoutOpCode := strings.Trim(commandTrimmed[1:], " ")
 
-	// Split all the parameters.
-	commandSplitted := strings.Split(commandWithoutOpCode, " ")
-
-	newCommand := Command{
-		opCode: OpCode(opCode),
-	}
 	formatStrings := []string{}
-	for _, parameter := range commandSplitted {
-		newCommand.parameters = append(newCommand.parameters, parameter)
-		formatStrings = append(formatStrings, "%s")
+	parameters := []any{}
+	readingParameter := []rune{}
+	readingQuotedString := false
+
+	storeParameterF := func() {
+		// In case the parameter was quoted persist this information by
+		// setting its format string to %q.
+		if slices.Contains(readingParameter, '"') {
+			formatStrings = append(formatStrings, "%q")
+		} else {
+			formatStrings = append(formatStrings, "%s")
+		}
+
+		// Now trim off the quotes if present.
+		parameters = append(parameters, strings.Trim(string(readingParameter), `"`))
 	}
 
-	newCommand.format = strings.Join(formatStrings, " ")
-	return &newCommand, nil
+	for _, commandRune := range commandWithoutOpCode {
+		// The end of the parameter is reached.
+		// Insert it into the list of command parameters.
+		if commandRune == ' ' && !readingQuotedString {
+			storeParameterF()
+
+			readingParameter = []rune{}
+			continue
+		}
+
+		if commandRune == '"' {
+			if !readingQuotedString {
+				readingQuotedString = true
+			} else {
+				readingQuotedString = false
+			}
+		}
+
+		readingParameter = append(readingParameter, commandRune)
+	}
+
+	if len(readingParameter) > 0 {
+		storeParameterF()
+	}
+
+	return &Command{
+		opCode:     OpCode(opCode),
+		format:     strings.Join(formatStrings, " "),
+		parameters: parameters,
+	}, nil
 }
 
 func (c *Command) String() string {
@@ -79,6 +114,16 @@ func (c *Command) OpCode() OpCode {
 	return c.opCode
 }
 
-func (c *Command) Parameters() []any {
-	return c.parameters
+func (c *Command) ParametersStrings() ([]string, error) {
+	parametersStrings := make([]string, 0, len(c.parameters))
+	for _, parameter := range c.parameters {
+		parameterString, ok := parameter.(string)
+		if !ok {
+			return nil, fmt.Errorf("failed to cast parameter %q to string", parameter)
+		}
+
+		parametersStrings = append(parametersStrings, parameterString)
+	}
+
+	return parametersStrings, nil
 }
