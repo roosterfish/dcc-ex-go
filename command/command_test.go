@@ -164,7 +164,3 @@ func TestNewCommandFromString(t *testing.T) {
 		}
 	}
 }
-
-// TODO: Some commands are still malformed:
-// <* Track A sensOffset=0 *>
-// <* Track B sensOff@ 0 2 "Power On">

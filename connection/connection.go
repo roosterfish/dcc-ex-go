@@ -2,6 +2,7 @@ package connection
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/roosterfish/dcc-ex-go/cab"
 	"github.com/roosterfish/dcc-ex-go/protocol"
@@ -37,7 +38,7 @@ func NewConnection(device string, mode Mode) (*Connection, error) {
 	return conn, nil
 }
 
-func (c *Connection) open() (serial.Port, error) {
+func (c *Connection) open() (io.ReadWriteCloser, error) {
 	port, err := serial.Open(c.device, c.mode)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to open %q: %w", c.device, err)

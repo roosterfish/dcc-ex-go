@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/roosterfish/dcc-ex-go/command"
-	"go.bug.st/serial"
 	"golang.org/x/sys/unix"
 )
 
@@ -19,7 +19,7 @@ type WriteF func(*command.Command) error
 type CleanupF func()
 
 type Protocol struct {
-	port                     serial.Port
+	port                     io.ReadWriteCloser
 	subscriptions            map[string]CommandC
 	commandSubscriptions     map[string]map[string]ObservationsC
 	opCodeSubscriptions      map[string]map[string]CommandC
@@ -50,7 +50,7 @@ type ReadWriteCloser interface {
 	Closer
 }
 
-func NewProtocol(port serial.Port) *Protocol {
+func NewProtocol(port io.ReadWriteCloser) *Protocol {
 	protocol := &Protocol{
 		port:                 port,
 		subscriptions:        make(map[string]CommandC),
