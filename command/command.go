@@ -5,11 +5,12 @@ import (
 	"strings"
 )
 
-type OpCode string
+type OpCode rune
 
 const (
-	OpCodeCabSpeed    OpCode = "t"
-	OpCodeCabFunction OpCode = "F"
+	OpCodeCabSpeed             OpCode = 't'
+	OpCodeCabFunction          OpCode = 'F'
+	OpCodeStationSupportedCabs OpCode = '#'
 )
 
 type Command struct {
@@ -26,38 +27,48 @@ func NewCommand(opCode OpCode, format string, parameters ...any) *Command {
 	}
 }
 
+// NewCommandFromString creates a new command from the given string.
+// The command can still contain the delimiting arrow characters
+// as they will get trimmed from the command in any case.
+// It follows the parsing recommendations in https://dcc-ex.com/reference/developers/api.html.
+// The internal representation of commands whose op code is immediately followed by the
+// first paramter is always performed using a separating whitespace.
+// A good example is the <JT> command whose internal representation is <J T>.
+// Also its response <jT> is represented as <j T> within the Command struct.
 func NewCommandFromString(command string) (*Command, error) {
-	if len(command) < 3 {
-		return nil, fmt.Errorf("Invalid command: %q", command)
-	}
-
 	commandTrimmed := strings.Trim(command, "<>")
-	commandSplit := strings.Split(commandTrimmed, " ")
-	if len(commandSplit) < 1 {
-		return nil, fmt.Errorf("Op code missing in command: %q", command)
+	if len(commandTrimmed) == 0 {
+		return nil, fmt.Errorf("invalid command length: %q", command)
 	}
 
-	formatStr := make([]string, 0, len(commandSplit)-1)
-	parameters := make([]any, 0, len(commandSplit)-1)
-	for _, parameter := range commandSplit[1:] {
-		formatStr = append(formatStr, "%s")
-		parameters = append(parameters, parameter)
+	opCode := commandTrimmed[0]
+
+	// Trim unwanted whitespaces from left and right.
+	commandWithoutOpCode := strings.Trim(commandTrimmed[1:], " ")
+
+	// Split all the parameters.
+	commandSplitted := strings.Split(commandWithoutOpCode, " ")
+
+	newCommand := Command{
+		opCode: OpCode(opCode),
+	}
+	formatStrings := []string{}
+	for _, parameter := range commandSplitted {
+		newCommand.parameters = append(newCommand.parameters, parameter)
+		formatStrings = append(formatStrings, "%s")
 	}
 
-	return &Command{
-		opCode:     OpCode(commandSplit[0]),
-		format:     strings.Join(formatStr, " "),
-		parameters: parameters,
-	}, nil
+	newCommand.format = strings.Join(formatStrings, " ")
+	return &newCommand, nil
 }
 
 func (c *Command) String() string {
 	// If no format is provided just print the op code.
 	if c.format == "" {
-		return fmt.Sprintf("<%s>", c.opCode)
+		return fmt.Sprintf("<%c>", c.opCode)
 	}
 
-	return fmt.Sprintf(fmt.Sprintf("<%s %s>", c.opCode, c.format), c.parameters...)
+	return fmt.Sprintf(fmt.Sprintf("<%c %s>", c.opCode, c.format), c.parameters...)
 }
 
 func (c *Command) Bytes() []byte {
