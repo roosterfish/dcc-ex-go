@@ -60,14 +60,18 @@ func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
 
 	select {
 	case cmd := <-commandC:
-		parameters := cmd.Parameters()
+		parameters, err := cmd.ParametersStrings()
+		if err != nil {
+			return 0, err
+		}
+
 		if len(parameters) != 1 {
 			return 0, fmt.Errorf("Invalid command: %q", cmd.String())
 		}
 
-		supportedCabs, err := strconv.Atoi(parameters[0].(string))
+		supportedCabs, err := strconv.Atoi(parameters[0])
 		if err != nil {
-			return 0, fmt.Errorf("Failed to cast supported cabs to int: %w", err)
+			return 0, fmt.Errorf("Failed to convert supported cabs to int: %w", err)
 		}
 
 		return supportedCabs, nil
