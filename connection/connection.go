@@ -49,7 +49,9 @@ func NewConnection(config *Config) (*Connection, error) {
 		return nil, err
 	}
 
-	conn.protocol = protocol.NewProtocol(port)
+	conn.protocol = protocol.NewProtocol(port, &protocol.Config{
+		RequireSubscriber: config.RequireSubscriber,
+	})
 	return conn, nil
 }
 

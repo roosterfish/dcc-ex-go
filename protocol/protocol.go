@@ -18,7 +18,12 @@ type CommandC chan *command.Command
 type WriteF func(*command.Command) error
 type CleanupF func()
 
+type Config struct {
+	RequireSubscriber bool
+}
+
 type Protocol struct {
+	config                   *Config
 	port                     io.ReadWriteCloser
 	subscriptions            map[string]CommandC
 	commandSubscriptions     map[string]map[string]ObservationsC
@@ -51,10 +56,11 @@ type ReadWriteCloser interface {
 	Closer
 }
 
-func NewProtocol(port io.ReadWriteCloser) *Protocol {
+func NewProtocol(port io.ReadWriteCloser, config *Config) *Protocol {
 	firstSubscriber := make(chan bool)
 
 	protocol := &Protocol{
+		config:               config,
 		port:                 port,
 		subscriptions:        make(map[string]CommandC),
 		commandSubscriptions: make(map[string]map[string]ObservationsC),
@@ -104,7 +110,9 @@ func (p *Protocol) listen(firstSubscriber chan bool) {
 	// Wait until the first subscriber is active.
 	// This ensures the subscriber can always observe the ready info message.
 	// The first subscriber closes the channel which unblocks belows statement.
-	<-firstSubscriber
+	if p.config.RequireSubscriber {
+		<-firstSubscriber
+	}
 
 	commandRunes := []rune{}
 	commandReading := false
