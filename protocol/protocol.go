@@ -358,17 +358,21 @@ func (p *Protocol) Write(command *command.Command) error {
 	defer p.writeLock.Unlock()
 
 	_, err := p.port.Write(command.Bytes())
-	if errors.Is(err, unix.EBADF) {
-		return fmt.Errorf("Serial port is closed")
+	if err != nil {
+		if errors.Is(err, unix.EBADF) {
+			return fmt.Errorf("serial port is closed")
+		} else {
+			return fmt.Errorf("failed to write command %q: %w", command.String(), err)
+		}
 	}
 
-	return err
+	return nil
 }
 
 func (p *Protocol) Close() error {
 	err := p.port.Close()
 	if err != nil {
-		return fmt.Errorf("Failed to close serial port: %w", err)
+		return fmt.Errorf("failed to close serial port: %w", err)
 	}
 
 	<-p.listenerExitC

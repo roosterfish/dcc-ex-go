@@ -2,6 +2,7 @@ package sensor
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/roosterfish/dcc-ex-go/command"
@@ -10,10 +11,17 @@ import (
 
 type ID uint16
 type State command.OpCode
+type VPin int
+type PullUp uint8
 
 const (
 	StateActive   State = 'Q'
 	StateInactive State = 'q'
+)
+
+const (
+	PullUpOff PullUp = iota
+	PullUpOn
 )
 
 type Sensor struct {
@@ -76,4 +84,14 @@ func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.C
 		cancel()
 		wg.Wait()
 	}
+}
+
+// Persist creates the sensor and persists its definition in the EEPROM.
+func (s *Sensor) Persist(vpin VPin, pullUp PullUp) error {
+	err := s.protocol.Write(command.NewCommand(command.OpCodeSensorCreate, "%d %d %d", s.id, vpin, pullUp))
+	if err != nil {
+		return fmt.Errorf("failed to persist sensor: %w", err)
+	}
+
+	return s.protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
 }

@@ -12,9 +12,11 @@ const (
 	OpCodeInfo                 OpCode = '@'
 	OpCodeStatus               OpCode = 's'
 	OpCodeStatusResponse       OpCode = 'i'
+	OpCodeEEPROM               OpCode = 'E'
 	OpCodeCabSpeed             OpCode = 't'
 	OpCodeCabFunction          OpCode = 'F'
 	OpCodeStationSupportedCabs OpCode = '#'
+	OpCodeSensorCreate         OpCode = 'S'
 )
 
 type Command struct {
