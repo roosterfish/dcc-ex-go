@@ -12,7 +12,7 @@ Start by plugging your [DCC-EX CommandStation](https://dcc-ex.com/ex-commandstat
 You can now create a new connection using the right device path:
 
 ```go
-conn, err := connection.NewConnection("/dev/ttyACM0", connection.DefaultMode)
+conn, err := connection.NewConnection(connection.NewDefaultConfig("/dev/ttyACM0"))
 if err != nil {
     log.Fatalln(err)
 }
@@ -20,10 +20,17 @@ if err != nil {
 defer conn.Close()
 ```
 
-Derive a new instance of the command station to power on the main track and join with the programming track:
+Derive a new instance of the command station to power on the main track and join with the programming track.
+But before wait until the station is ready to receive commands:
 
 ```go
 commandStation := conn.CommandStation()
+
+err = controller.Ready(context.Background())
+if err != nil {
+    log.Fatalln(err)
+}
+
 err = commandStation.PowerTrack(station.PowerOn, station.TrackJoin)
 if err != nil {
     log.Fatalln(err)
@@ -35,6 +42,15 @@ Set the speed of the locomotive after deriving it from its address:
 ```go
 loc := conn.Cab(3)
 err = loc.Speed(70, cab.DirectionForward)
+if err != nil {
+    log.Fatalln(err)
+}
+```
+
+And activate function F1:
+
+```go
+err = loc.Function(1, cab.FunctionOn)
 if err != nil {
     log.Fatalln(err)
 }
@@ -58,6 +74,19 @@ cleanup := block.SetCallback(sensor.StateInactive, func(id sensor.ID, state sens
 })
 
 defer cleanup()
+```
+
+## Status information
+
+Retrieve status information from the command station:
+
+```go
+status, err := controller.Status(context.Background())
+if err != nil {
+    log.Fatalln(err)
+}
+
+fmt.Printf("Version: %s\n", status.Version)
 ```
 
 ## Direct console access
