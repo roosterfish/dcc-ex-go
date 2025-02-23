@@ -23,7 +23,8 @@ type Protocol struct {
 	subscriptions            map[string]CommandC
 	commandSubscriptions     map[string]map[string]ObservationsC
 	opCodeSubscriptions      map[string]map[string]CommandC
-	listenerExit             chan bool
+	firstSubscriberF         func()
+	listenerExitC            chan bool
 	subscriptionLock         sync.Mutex
 	commandSubscriptionsLock sync.Mutex
 	opCodeSubscriptionsLock  sync.Mutex
@@ -51,21 +52,26 @@ type ReadWriteCloser interface {
 }
 
 func NewProtocol(port io.ReadWriteCloser) *Protocol {
+	firstSubscriber := make(chan bool)
+
 	protocol := &Protocol{
 		port:                 port,
 		subscriptions:        make(map[string]CommandC),
 		commandSubscriptions: make(map[string]map[string]ObservationsC),
 		opCodeSubscriptions:  make(map[string]map[string]CommandC),
-		listenerExit:         make(chan bool),
+		firstSubscriberF: sync.OnceFunc(func() {
+			close(firstSubscriber)
+		}),
+		listenerExitC: make(chan bool),
 	}
 
-	go protocol.listen()
+	go protocol.listen(firstSubscriber)
 	return protocol
 }
 
-func (p *Protocol) listen() {
+func (p *Protocol) listen(firstSubscriber chan bool) {
 	// The protocol's Close is waiting for the channel to be closed.
-	defer close(p.listenerExit)
+	defer close(p.listenerExitC)
 
 	notifyF := func(stringCommand string) {
 		command, err := command.NewCommandFromString(stringCommand)
@@ -94,6 +100,11 @@ func (p *Protocol) listen() {
 
 		p.subscriptionLock.Unlock()
 	}
+
+	// Wait until the first subscriber is active.
+	// This ensures the subscriber can always observe the ready info message.
+	// The first subscriber closes the channel which unblocks belows statement.
+	<-firstSubscriber
 
 	commandRunes := []rune{}
 	commandReading := false
@@ -142,6 +153,9 @@ func (p *Protocol) Read() (CommandC, CleanupF) {
 	subscription := make(CommandC)
 	p.subscriptions[uuid] = subscription
 	p.subscriptionLock.Unlock()
+
+	// Unlock the listener as at least one subscriber is active.
+	p.firstSubscriberF()
 
 	commandC := make(CommandC)
 
@@ -198,6 +212,9 @@ func (p *Protocol) ReadCommand(command *command.Command) (ObservationsC, Cleanup
 	if !ok {
 		p.commandSubscriptions[commandStr] = make(map[string]ObservationsC)
 	}
+
+	// Unlock the listener as at least one subscriber is active.
+	p.firstSubscriberF()
 
 	// In order to easily identify the caller in the subscription map create an UUID.
 	uuid := uuid.NewString()
@@ -266,6 +283,9 @@ func (p *Protocol) ReadOpCode(opCode command.OpCode) (CommandC, CleanupF) {
 	if !ok {
 		p.opCodeSubscriptions[opCodeStr] = make(map[string]CommandC)
 	}
+
+	// Unlock the listener as at least one subscriber is active.
+	p.firstSubscriberF()
 
 	// In order to easily identify the caller in the subscription map create an UUID.
 	uuid := uuid.NewString()
@@ -343,6 +363,6 @@ func (p *Protocol) Close() error {
 		return fmt.Errorf("Failed to close serial port: %w", err)
 	}
 
-	<-p.listenerExit
+	<-p.listenerExitC
 	return nil
 }
