@@ -13,9 +13,17 @@ import (
 
 type Mode *serial.Mode
 
+type Config struct {
+	Device string
+	Mode   Mode
+	// RequireSubscriber sets whether or not the connections protocol listener starts to consume
+	// messages before there is a single subscriber reading commands.
+	// The default is true which allows waiting until the command station is ready.
+	RequireSubscriber bool
+}
+
 type Connection struct {
-	device   string
-	mode     Mode
+	config   *Config
 	protocol protocol.ReadWriteCloser
 }
 
@@ -23,10 +31,17 @@ var DefaultMode Mode = &serial.Mode{
 	BaudRate: 115200,
 }
 
-func NewConnection(device string, mode Mode) (*Connection, error) {
+func NewDefaultConfig(device string) *Config {
+	return &Config{
+		Device:            device,
+		Mode:              DefaultMode,
+		RequireSubscriber: true,
+	}
+}
+
+func NewConnection(config *Config) (*Connection, error) {
 	conn := &Connection{
-		device: device,
-		mode:   mode,
+		config: config,
 	}
 
 	port, err := conn.open()
@@ -39,9 +54,9 @@ func NewConnection(device string, mode Mode) (*Connection, error) {
 }
 
 func (c *Connection) open() (io.ReadWriteCloser, error) {
-	port, err := serial.Open(c.device, c.mode)
+	port, err := serial.Open(c.config.Device, c.config.Mode)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open %q: %w", c.device, err)
+		return nil, fmt.Errorf("Failed to open %q: %w", c.config.Device, err)
 	}
 
 	return port, nil
