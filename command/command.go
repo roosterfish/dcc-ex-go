@@ -9,6 +9,9 @@ import (
 type OpCode rune
 
 const (
+	OpCodeInfo                 OpCode = '@'
+	OpCodeStatus               OpCode = 's'
+	OpCodeStatusResponse       OpCode = 'i'
 	OpCodeCabSpeed             OpCode = 't'
 	OpCodeCabFunction          OpCode = 'F'
 	OpCodeStationSupportedCabs OpCode = '#'
