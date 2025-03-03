@@ -10,6 +10,7 @@ type OpCode rune
 
 const (
 	OpCodeInfo                 OpCode = '@'
+	OpCodeSuccess              OpCode = 'O'
 	OpCodeStatus               OpCode = 's'
 	OpCodeStatusResponse       OpCode = 'i'
 	OpCodeEEPROM               OpCode = 'E'

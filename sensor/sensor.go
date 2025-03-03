@@ -87,11 +87,23 @@ func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.C
 }
 
 // Persist creates the sensor and persists its definition in the EEPROM.
-func (s *Sensor) Persist(vpin VPin, pullUp PullUp) error {
+func (s *Sensor) Persist(ctx context.Context, vpin VPin, pullUp PullUp) error {
 	err := s.protocol.Write(command.NewCommand(command.OpCodeSensorCreate, "%d %d %d", s.id, vpin, pullUp))
 	if err != nil {
 		return fmt.Errorf("failed to persist sensor: %w", err)
 	}
 
-	return s.protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
+	commandC, cleanupF := s.protocol.ReadOpCode(command.OpCodeSuccess)
+	defer cleanupF()
+
+	go func() {
+		err = s.protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
+	}()
+
+	select {
+	case <-commandC:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
