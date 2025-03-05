@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
@@ -40,8 +41,12 @@ func NewSensor(id ID, protocol protocol.ReadWriteCloser) *Sensor {
 	}
 }
 
+func (s *Sensor) Watch(state State) (protocol.ObservationsC, protocol.CleanupF) {
+	return s.protocol.ReadCommand(command.NewCommand(state.OpCode(), "%d", s.id))
+}
+
 func (s *Sensor) Wait(ctx context.Context, state State) error {
-	observed, cleanup := s.protocol.ReadCommand(command.NewCommand(state.OpCode(), "%d", s.id))
+	observed, cleanup := s.Watch(state)
 	defer cleanup()
 
 	select {
@@ -52,8 +57,39 @@ func (s *Sensor) Wait(ctx context.Context, state State) error {
 	}
 }
 
-func (s *Sensor) Watch(state State) (protocol.ObservationsC, protocol.CleanupF) {
-	return s.protocol.ReadCommand(command.NewCommand(state.OpCode(), "%d", s.id))
+// WaitConsistent waits until the sensor's new state was unchanged for at least the given duration.
+// This helps waiting for sensors (e.g. block detection) whose values flicker during the transition period.
+func (s *Sensor) WaitConsistent(ctx context.Context, state State, duration time.Duration) error {
+	observedC, cleanupF := s.Watch(state)
+	defer cleanupF()
+
+	observedOppositeC, cleanupF := s.Watch(state.Opposite())
+	defer cleanupF()
+
+	// Create a new timer without any duration.
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	// As the timer was created without duration it will expire right away.
+	// Read the expiry time from the channel so it's clean.
+	<-timer.C
+
+	for {
+		select {
+		case <-observedC:
+			// In case the requested state was observed reset the expired timer.
+			_ = timer.Reset(duration)
+		case <-observedOppositeC:
+			// In case the opposite state was observed stop the timer.
+			_ = timer.Stop()
+		case <-timer.C:
+			// In case the timer expired return.
+			return nil
+		case <-ctx.Done():
+			// If the outer context expires return the error.
+			return ctx.Err()
+		}
+	}
 }
 
 func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.CleanupF {
