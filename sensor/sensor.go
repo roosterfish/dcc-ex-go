@@ -97,7 +97,7 @@ func (s *Sensor) Persist(ctx context.Context, vpin VPin, pullUp PullUp) error {
 	defer cleanupF()
 
 	go func() {
-		err = s.protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
+		_ = s.protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
 	}()
 
 	select {
