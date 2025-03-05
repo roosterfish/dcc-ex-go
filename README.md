@@ -26,7 +26,7 @@ But before wait until the station is ready to receive commands:
 ```go
 commandStation := conn.CommandStation()
 
-err = controller.Ready(context.Background())
+err = commandStation.Ready(context.Background())
 if err != nil {
     log.Fatalln(err)
 }
