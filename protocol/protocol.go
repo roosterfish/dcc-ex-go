@@ -57,6 +57,7 @@ type ReadWriteCloser interface {
 	Closer
 }
 
+// NewProtocol returns a new protocol wrapping the given connection (port).
 func NewProtocol(port io.ReadWriteCloser, config *Config) *Protocol {
 	firstSubscriber := make(chan bool)
 
@@ -74,6 +75,7 @@ func NewProtocol(port io.ReadWriteCloser, config *Config) *Protocol {
 	return protocol
 }
 
+// listen sends the ingress commands to all subscribers (readers).
 func (p *Protocol) listen(firstSubscriber chan bool) {
 	// The protocol's Close is waiting for the channel to be closed.
 	defer close(p.listenerExitC)
@@ -141,6 +143,11 @@ func (p *Protocol) listen(firstSubscriber chan bool) {
 	}
 }
 
+// Read returns a channel on which every ingress command from the underlying connections gets send to.
+// Never close the channel manually but instead call the cleanup function.
+// Try to read from the channel as fast as possible and don't wait too long after reading the last
+// command and calling cleanup as this might block every other caller of Read.
+// New commands are sent to all readers one after another.
 func (p *Protocol) Read() (CommandC, CleanupF) {
 	// In order to easily identify the caller in the subscription map create an UUID.
 	uuid := uuid.NewString()
@@ -210,6 +217,7 @@ func (p *Protocol) Read() (CommandC, CleanupF) {
 	return subscription.egressC, cleanup
 }
 
+// ReadCommand waits until the given command was observed on the underlying connection and returns afterwards.
 func (p *Protocol) ReadCommand(ctx context.Context, command *command.Command) error {
 	commandC, cleanupF := p.Read()
 	defer cleanupF()
@@ -228,6 +236,7 @@ func (p *Protocol) ReadCommand(ctx context.Context, command *command.Command) er
 	}
 }
 
+// ReadOpCode waits until the given op code was observed on the underlying connection and returns the corresponding command.
 func (p *Protocol) ReadOpCode(ctx context.Context, opCode command.OpCode) (*command.Command, error) {
 	commandC, cleanupF := p.Read()
 	defer cleanupF()
@@ -244,6 +253,8 @@ func (p *Protocol) ReadOpCode(ctx context.Context, opCode command.OpCode) (*comm
 	}
 }
 
+// Write writes a new command onto the protocol's underlying connection.
+// Writes aquire a lock as the method might be exposed to the user when using the console without channel sessions.
 func (p *Protocol) Write(command *command.Command) error {
 	p.writeLock.Lock()
 	defer p.writeLock.Unlock()
@@ -260,6 +271,7 @@ func (p *Protocol) Write(command *command.Command) error {
 	return nil
 }
 
+// Close closes the underlying connection.
 func (p *Protocol) Close() error {
 	err := p.port.Close()
 	if err != nil {
