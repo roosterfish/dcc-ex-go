@@ -4,7 +4,12 @@ This module contains Go bindings for the [DCC-EX](https://dcc-ex.com) native com
 It implements the commands outlined in the [summary](https://dcc-ex.com/reference/software/command-summary-consolidated.html) and
 uses Go's language features to easily interact with the various entities available in the [DCC-EX CommandStation](https://dcc-ex.com/ex-commandstation/index.html).
 
-Not all of the native commands are implemented yet.
+As the underlying serial connection doesn't allow mapping the response(s) to the actual command the module offers the concept of a
+channel on which a caller can obtain either a rw (read/write) or ro (read-only) session.
+This allows the serialization of commands which expect one or more responses to be sent by DCC-EX.
+The logic of this is mostly hidden behind the individual package's functions.
+
+By far not all of the native commands are implemented yet.
 
 ## Get started
 
