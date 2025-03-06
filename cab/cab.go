@@ -1,6 +1,7 @@
 package cab
 
 import (
+	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
 )
@@ -17,8 +18,8 @@ type Function uint8
 type FunctionState uint8
 
 type Cab struct {
-	address  Address
-	protocol protocol.ReadWriteCloser
+	address Address
+	channel *channel.Channel
 }
 
 const (
@@ -35,17 +36,21 @@ const (
 	CabCommand rune = 't'
 )
 
-func NewCab(address Address, protocol protocol.ReadWriteCloser) *Cab {
+func NewCab(address Address, channel *channel.Channel) *Cab {
 	return &Cab{
-		address:  address,
-		protocol: protocol,
+		address: address,
+		channel: channel,
 	}
 }
 
 func (c *Cab) Speed(speed Speed, direction Direction) error {
-	return c.protocol.Write(command.NewCommand(command.OpCodeCabSpeed, "%d %d %d", c.address, speed, direction))
+	return c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+		return protocol.Write(command.NewCommand(command.OpCodeCabSpeed, "%d %d %d", c.address, speed, direction))
+	})
 }
 
 func (c *Cab) Function(funct Function, state FunctionState) error {
-	return c.protocol.Write(command.NewCommand(command.OpCodeCabFunction, "%d %d %d", c.address, funct, state))
+	return c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+		return protocol.Write(command.NewCommand(command.OpCodeCabFunction, "%d %d %d", c.address, funct, state))
+	})
 }
