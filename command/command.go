@@ -11,6 +11,7 @@ type OpCode rune
 const (
 	OpCodeInfo                 OpCode = '@'
 	OpCodeSuccess              OpCode = 'O'
+	OpCodeFail                 OpCode = 'X'
 	OpCodeStatus               OpCode = 's'
 	OpCodeStatusResponse       OpCode = 'i'
 	OpCodeEEPROM               OpCode = 'E'
@@ -26,12 +27,25 @@ type Command struct {
 	parameters []any
 }
 
+// NewCommand returns a new memory representation of an opcode together with parameters.
 func NewCommand(opCode OpCode, format string, parameters ...any) *Command {
 	return &Command{
 		opCode:     opCode,
 		format:     format,
 		parameters: parameters,
 	}
+}
+
+// NewControlCommand returns a command's memory representation including a control command.
+// This control command cannot be interpreted by DCC-EX which causes a <X> sent at the end
+// of the output of the preceding valid command.
+// This allows identifying the end of output caused by any command.
+// An example control command would be <Q ><⚡> where the characters "><⚡" are internally represented
+// as command parameters.
+// DCC-EX lists all of the sensors including their current state followed by a <X> as <⚡>
+// is not a valid command.
+func NewControlCommand(opCode OpCode) *Command {
+	return NewCommand(opCode, "%s", "><⚡")
 }
 
 // NewCommandFromString creates a new command from the given string.
