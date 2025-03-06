@@ -99,7 +99,6 @@ func (s *Sensor) WaitConsistent(ctx context.Context, state State, duration time.
 }
 
 func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.CleanupF {
-	lock := sync.Mutex{}
 	wg := sync.WaitGroup{}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -107,16 +106,23 @@ func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.C
 	watcher := func() {
 		defer wg.Done()
 
-		for {
-			err := s.Wait(ctx, state)
-			if err != nil {
-				return
-			}
+		_ = s.channel.RSession(func(protocol protocol.Reader) error {
+			commandC, cleanupF := protocol.Read()
+			defer cleanupF()
 
-			lock.Lock()
-			f(s.id, state)
-			lock.Unlock()
-		}
+			stateCommand := command.NewCommand(state.OpCode(), "%d", s.id)
+
+			for {
+				select {
+				case cmd := <-commandC:
+					if cmd.String() == stateCommand.String() {
+						f(s.id, state)
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		})
 	}
 
 	wg.Add(1)
