@@ -3,6 +3,7 @@ package turnout
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
@@ -18,6 +19,14 @@ type Profile uint8
 type TurnoutServo struct {
 	id      ID
 	channel *channel.Channel
+}
+
+type TurnoutServoStatus struct {
+	VPin           int
+	ThrownPosition Pos
+	ClosedPosition Pos
+	Profile        Profile
+	State          State
 }
 
 const (
@@ -58,16 +67,85 @@ func (t *TurnoutServo) Persist(ctx context.Context, vpin VPin, thrownPos Pos, cl
 	})
 }
 
-func (t *TurnoutServo) changeState(s state) error {
-	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		return protocol.Write(command.NewCommand(command.OpCodeTurnout, "%d %c", t.id, s))
-	})
+func (t *TurnoutServo) setState(protocol protocol.ReadWriteCloser, state State) error {
+	return protocol.Write(command.NewCommand(command.OpCodeTurnout, "%d %c", t.id, state))
 }
 
 func (t *TurnoutServo) Throw() error {
-	return t.changeState(stateThrow)
+	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+		return t.setState(protocol, StateThrown)
+	})
 }
 
 func (t *TurnoutServo) Close() error {
-	return t.changeState(stateClose)
+	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+		return t.setState(protocol, StateClosed)
+	})
+}
+
+// Examine returns the status of the servo.
+func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error) {
+	var responseCommand *command.Command
+	err := t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+		g, ctx := errgroup.WithContext(ctx)
+
+		g.Go(func() error {
+			var err error
+			responseCommand, err = protocol.ReadOpCode(ctx, command.OpCodeTurnoutResponse)
+			return err
+		})
+
+		g.Go(func() error {
+			return t.setState(protocol, StateExamine)
+		})
+
+		return g.Wait()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	parameters, err := responseCommand.ParametersStrings()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(parameters) != 7 {
+		return nil, fmt.Errorf("invalid command: %q", responseCommand.String())
+	}
+
+	vPin, err := strconv.Atoi(parameters[2])
+	if err != nil {
+		return nil, fmt.Errorf("invalid vpin %q: %w", parameters[2], err)
+	}
+
+	thrownPosition, err := strconv.ParseUint(parameters[3], 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("invalid thrown position %q: %w", parameters[3], err)
+	}
+
+	closedPosition, err := strconv.ParseUint(parameters[4], 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("invalid closed position %q: %w", parameters[4], err)
+	}
+
+	profile, err := strconv.ParseUint(parameters[5], 10, 8)
+	if err != nil {
+		return nil, fmt.Errorf("invalid profile %q: %w", parameters[5], err)
+	}
+
+	state := []rune(parameters[6])
+	if len(state) != 1 {
+		return nil, fmt.Errorf("invalid state %q", parameters[6])
+	}
+
+	status := &TurnoutServoStatus{
+		VPin:           vPin,
+		ThrownPosition: Pos(thrownPosition),
+		ClosedPosition: Pos(closedPosition),
+		Profile:        Profile(profile),
+		State:          State(state[0]),
+	}
+
+	return status, nil
 }
