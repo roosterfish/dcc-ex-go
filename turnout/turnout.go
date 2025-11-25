@@ -2,10 +2,10 @@ package turnout
 
 import "github.com/roosterfish/dcc-ex-go/command"
 
-type state command.OpCode
+type State command.OpCode
 
 const (
-	stateThrow state = 'T'
-	stateClose state = 'C'
-	// stateExamine state = 'X'
+	StateThrown  State = 'T'
+	StateClosed  State = 'C'
+	StateExamine State = 'X'
 )
