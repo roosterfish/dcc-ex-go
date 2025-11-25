@@ -19,6 +19,7 @@ const (
 	OpCodeCabFunction          OpCode = 'F'
 	OpCodeStationSupportedCabs OpCode = '#'
 	OpCodeSensorCreate         OpCode = 'S'
+	OpCodeTurnout              OpCode = 'T'
 )
 
 type Command struct {
