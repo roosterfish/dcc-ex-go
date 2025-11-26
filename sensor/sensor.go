@@ -15,7 +15,7 @@ import (
 
 type ID uint16
 type State command.OpCode
-type VPin int
+type VPin uint16
 type PullUp uint8
 
 const (
