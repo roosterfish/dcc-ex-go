@@ -86,7 +86,7 @@ func (t *TurnoutServo) Close() error {
 // Examine returns the status of the servo.
 func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error) {
 	var responseCommand *command.Command
-	err := t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+	err := t.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
 		g, ctx := errgroup.WithContext(ctx)
 
 		g.Go(func() error {
@@ -102,7 +102,7 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		return g.Wait()
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to examine turnout %d: %w", t.id, err)
 	}
 
 	parameters, err := responseCommand.ParametersStrings()
