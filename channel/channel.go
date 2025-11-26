@@ -10,15 +10,33 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// readWriteCloserCache wraps the protocols readWriteCloser and allows caching the written commands.
+type readWriteCloserCache struct {
+	protocol.ReadWriteCloser
+	commandCache command.Command
+}
+
+// Write caches the written command and calls the wrapped readWriteCloser's Write.
+func (r *readWriteCloserCache) Write(command *command.Command) error {
+	// Don't copy the pointer to ensure we don't influence the underlying protocol.
+	r.commandCache = *command
+	return r.ReadWriteCloser.Write(command)
+}
+
+// LastCommand returns the last written command from the cache.
+func (r *readWriteCloserCache) lastCommand() *command.Command {
+	return &r.commandCache
+}
+
 type Channel struct {
-	protocol    protocol.ReadWriteCloser
+	protocol    *readWriteCloserCache
 	sessionLock sync.Mutex
 }
 
 // NewChannel returns a new channel using the given protocol.
 func NewChannel(protocol protocol.ReadWriteCloser) *Channel {
 	return &Channel{
-		protocol: protocol,
+		protocol: &readWriteCloserCache{ReadWriteCloser: protocol},
 	}
 }
 
@@ -51,7 +69,7 @@ func (c *Channel) SessionSuccess(ctx context.Context, sessionF func(ctx context.
 			return err
 		}
 
-		return fmt.Errorf("observed failure during session")
+		return fmt.Errorf("observed session failure after last command %q", c.protocol.lastCommand().String())
 	})
 
 	g.Go(func() error {
