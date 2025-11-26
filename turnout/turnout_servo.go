@@ -12,8 +12,8 @@ import (
 )
 
 type ID uint16
-type VPin int
-type Pos uint16
+type VPin uint16
+type Position uint16
 type Profile uint8
 
 type TurnoutServo struct {
@@ -22,9 +22,9 @@ type TurnoutServo struct {
 }
 
 type TurnoutServoStatus struct {
-	VPin           int
-	ThrownPosition Pos
-	ClosedPosition Pos
+	VPin           VPin
+	ThrownPosition Position
+	ClosedPosition Position
 	Profile        Profile
 	State          State
 }
@@ -45,7 +45,7 @@ func NewTurnoutServo(id ID, channel *channel.Channel) *TurnoutServo {
 }
 
 // Persist creates the turnout and persists its definition in the EEPROM.
-func (t *TurnoutServo) Persist(ctx context.Context, vpin VPin, thrownPos Pos, closedPos Pos, profile Profile) error {
+func (t *TurnoutServo) Persist(ctx context.Context, vpin VPin, thrownPos Position, closedPos Position, profile Profile) error {
 	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		err := protocol.Write(command.NewCommand(command.OpCodeTurnout, "%d SERVO %d %d %d %d", t.id, vpin, thrownPos, closedPos, profile))
 		if err != nil {
@@ -114,7 +114,7 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		return nil, fmt.Errorf("invalid command: %q", responseCommand.String())
 	}
 
-	vPin, err := strconv.Atoi(parameters[2])
+	vPin, err := strconv.ParseUint(parameters[2], 10, 16)
 	if err != nil {
 		return nil, fmt.Errorf("invalid vpin %q: %w", parameters[2], err)
 	}
@@ -140,9 +140,9 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 	}
 
 	status := &TurnoutServoStatus{
-		VPin:           vPin,
-		ThrownPosition: Pos(thrownPosition),
-		ClosedPosition: Pos(closedPosition),
+		VPin:           VPin(vPin),
+		ThrownPosition: Position(thrownPosition),
+		ClosedPosition: Position(closedPosition),
 		Profile:        Profile(profile),
 		State:          State(state[0]),
 	}
