@@ -21,6 +21,8 @@ const (
 	OpCodeSensorCreate         OpCode = 'S'
 	OpCodeTurnout              OpCode = 'T'
 	OpCodeTurnoutResponse      OpCode = 'H'
+	OpCodeOutput               OpCode = 'Z'
+	OpCodeOutputResponse       OpCode = 'Y'
 	OpCodeOutputControl        OpCode = 'z'
 )
 
