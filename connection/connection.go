@@ -6,6 +6,7 @@ import (
 
 	"github.com/roosterfish/dcc-ex-go/cab"
 	"github.com/roosterfish/dcc-ex-go/channel"
+	"github.com/roosterfish/dcc-ex-go/output"
 	"github.com/roosterfish/dcc-ex-go/protocol"
 	"github.com/roosterfish/dcc-ex-go/sensor"
 	"github.com/roosterfish/dcc-ex-go/station"
@@ -83,6 +84,10 @@ func (c *Connection) Sensor(id sensor.ID) *sensor.Sensor {
 
 func (c *Connection) TurnoutServo(id turnout.ID) *turnout.TurnoutServo {
 	return turnout.NewTurnoutServo(id, c.channel)
+}
+
+func (c *Connection) OutputHeadless() *output.OutputHeadless {
+	return output.NewOutputHeadless(c.channel)
 }
 
 func (c *Connection) CommandStation() *station.CommandStation {
