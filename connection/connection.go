@@ -86,6 +86,10 @@ func (c *Connection) TurnoutServo(id turnout.ID) *turnout.TurnoutServo {
 	return turnout.NewTurnoutServo(id, c.channel)
 }
 
+func (c *Connection) Output(id output.ID) *output.Output {
+	return output.NewOutput(id, c.channel)
+}
+
 func (c *Connection) OutputHeadless() *output.OutputHeadless {
 	return output.NewOutputHeadless(c.channel)
 }
