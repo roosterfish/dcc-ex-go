@@ -11,6 +11,7 @@ import (
 
 type VPin uint16
 type AnalogValue uint16
+type DigitalValue bool
 type Profile uint16
 type Duration uint16
 
@@ -19,6 +20,9 @@ const (
 
 	LEDLow  AnalogValue = 0
 	LEDHigh AnalogValue = 4095
+
+	High DigitalValue = true
+	Low  DigitalValue = false
 )
 
 type OutputHeadless struct {
@@ -31,6 +35,23 @@ func NewOutputHeadless(channel *channel.Channel) *OutputHeadless {
 	return &OutputHeadless{
 		channel: channel,
 	}
+}
+
+// Set sets the digital value to vPin.
+func (o *OutputHeadless) Set(vPin VPin, value DigitalValue) error {
+	var prefix string
+	if value == Low {
+		prefix = "-"
+	}
+
+	return o.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+		err := protocol.Write(command.NewCommand(command.OpCodeOutputControl, "%s%d", prefix, vPin))
+		if err != nil {
+			return fmt.Errorf("failed to set analog value on vpin %d: %w", vPin, err)
+		}
+
+		return nil
+	})
 }
 
 // SetAnalog sets the analog value to vPin using profile.
