@@ -47,7 +47,7 @@ func (o *OutputHeadless) Set(vPin VPin, value DigitalValue) error {
 	return o.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		err := protocol.Write(command.NewCommand(command.OpCodeOutputControl, "%s%d", prefix, vPin))
 		if err != nil {
-			return fmt.Errorf("failed to set analog value on vpin %d: %w", vPin, err)
+			return fmt.Errorf("failed to set digital value on vpin %d: %w", vPin, err)
 		}
 
 		return nil
