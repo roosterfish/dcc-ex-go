@@ -21,6 +21,7 @@ const (
 	OpCodeSensorCreate         OpCode = 'S'
 	OpCodeTurnout              OpCode = 'T'
 	OpCodeTurnoutResponse      OpCode = 'H'
+	OpCodeOutputControl        OpCode = 'z'
 )
 
 type Command struct {
