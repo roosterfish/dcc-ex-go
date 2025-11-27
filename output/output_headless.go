@@ -11,7 +11,7 @@ import (
 
 type VPin uint16
 type AnalogValue uint16
-type DigitalValue bool
+type DigitalValue rune
 type Profile uint16
 type Duration uint16
 
@@ -21,8 +21,8 @@ const (
 	LEDLow  AnalogValue = 0
 	LEDHigh AnalogValue = 4095
 
-	High DigitalValue = true
-	Low  DigitalValue = false
+	Low  DigitalValue = '0'
+	High DigitalValue = '1'
 )
 
 type OutputHeadless struct {
