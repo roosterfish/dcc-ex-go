@@ -36,6 +36,14 @@ const (
 	CabCommand rune = 't'
 )
 
+func (d Direction) Opposite() Direction {
+	if d == DirectionForward {
+		return DirectionBackward
+	}
+
+	return DirectionForward
+}
+
 func NewCab(address Address, channel *channel.Channel) *Cab {
 	return &Cab{
 		address: address,
