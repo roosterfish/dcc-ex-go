@@ -72,9 +72,28 @@ func (c *CommandStation) Power(state PowerState) error {
 }
 
 // PowerTrack sets the tracks power to the given state.
-func (c *CommandStation) PowerTrack(state PowerState, track Track) error {
+func (c *CommandStation) PowerTrack(ctx context.Context, state PowerState, track Track) error {
 	return c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		return protocol.Write(command.NewCommand(state.OpCode(), "%s", track))
+		commandC, cleanupF := protocol.Read()
+		defer cleanupF()
+
+		err := protocol.Write(command.NewControlCommand(state.OpCode(), "%s", track))
+		if err != nil {
+			return err
+		}
+
+		for {
+			select {
+			case cmd := <-commandC:
+				// Loop through the received commands until observing the end of the output.
+				// This is indicated by the fail opcode as we have sent an invalid control command.
+				if cmd.OpCode() == command.OpCodeFail {
+					return nil
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	})
 }
 
