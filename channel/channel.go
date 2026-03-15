@@ -64,12 +64,12 @@ func (c *Channel) SessionSuccess(ctx context.Context, sessionF func(ctx context.
 
 	g, ctx := errgroup.WithContext(earlyCancelCtx)
 	g.Go(func() error {
-		_, err := c.protocol.ReadOpCode(ctx, command.OpCodeFail)
+		failCommand, err := c.protocol.ReadOpCode(ctx, command.OpCodeFail)
 		if err != nil {
 			return err
 		}
 
-		return fmt.Errorf("observed session failure after last command %q", c.protocol.lastCommand().String())
+		return fmt.Errorf("observed session failure after last command %q: %q", c.protocol.lastCommand().String(), failCommand.String())
 	})
 
 	g.Go(func() error {
