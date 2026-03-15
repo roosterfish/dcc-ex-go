@@ -106,6 +106,8 @@ func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.C
 	watcher := func() {
 		defer wg.Done()
 
+		wgInner := sync.WaitGroup{}
+
 		_ = s.channel.RSession(func(protocol protocol.Reader) error {
 			commandC, cleanupF := protocol.Read()
 			defer cleanupF()
@@ -116,13 +118,22 @@ func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.C
 				select {
 				case cmd := <-commandC:
 					if cmd.String() == stateCommand.String() {
-						f(s.id, state)
+						// Ensure the callback is always executed in its own routine.
+						// This is essential to detach from the protocols read loop.
+						wgInner.Add(1)
+						go func() {
+							defer wgInner.Done()
+
+							f(s.id, state)
+						}()
 					}
 				case <-ctx.Done():
 					return ctx.Err()
 				}
 			}
 		})
+
+		wgInner.Wait()
 	}
 
 	wg.Add(1)
