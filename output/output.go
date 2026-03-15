@@ -80,7 +80,7 @@ func (o *Output) Status(ctx context.Context) (*Status, error) {
 		g := &errgroup.Group{}
 		g.Go(func() error {
 			// Send a control command to allow waiting for the end of the output.
-			return protocol.Write(command.NewControlCommand(command.OpCodeOutput))
+			return protocol.Write(command.NewControlCommand(command.OpCodeOutput, ""))
 		})
 
 		err := g.Wait()

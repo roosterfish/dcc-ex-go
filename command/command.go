@@ -49,8 +49,8 @@ func NewCommand(opCode OpCode, format string, parameters ...any) *Command {
 // as command parameters.
 // DCC-EX lists all of the sensors including their current state followed by a <X> as <⚡>
 // is not a valid command.
-func NewControlCommand(opCode OpCode) *Command {
-	return NewCommand(opCode, "%s", "><⚡")
+func NewControlCommand(opCode OpCode, format string, parameters ...any) *Command {
+	return NewCommand(opCode, format+"%s", append(parameters, "><⚡")...)
 }
 
 // NewCommandFromString creates a new command from the given string.
