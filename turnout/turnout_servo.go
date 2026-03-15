@@ -105,8 +105,6 @@ func (t *TurnoutServo) Close(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Println("close turnout", t.id, status.State == StateClosed)
-
 	if status.State == StateClosed {
 		return nil
 	}
