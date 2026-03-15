@@ -36,7 +36,7 @@ if err != nil {
     log.Fatalln(err)
 }
 
-err = commandStation.PowerTrack(station.PowerOn, station.TrackJoin)
+err = commandStation.PowerTrack(context.Background(), station.PowerOn, station.TrackJoin)
 if err != nil {
     log.Fatalln(err)
 }
@@ -46,7 +46,7 @@ Set the speed of the locomotive after deriving it from its address:
 
 ```go
 loc := conn.Cab(3)
-err = loc.Speed(70, cab.DirectionForward)
+err = loc.Speed(context.Background(), 70, cab.DirectionForward)
 if err != nil {
     log.Fatalln(err)
 }
@@ -55,7 +55,7 @@ if err != nil {
 And activate function F1:
 
 ```go
-err = loc.Function(1, cab.FunctionOn)
+err = loc.Function(context.Background(), 1, cab.FunctionOn)
 if err != nil {
     log.Fatalln(err)
 }
