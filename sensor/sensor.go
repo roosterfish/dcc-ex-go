@@ -60,14 +60,32 @@ func (s *Sensor) Wait(ctx context.Context, state State) error {
 
 // WaitConsistent waits until the sensor's new state was unchanged for at least the given duration.
 // This helps waiting for sensors (e.g. block detection) whose values flicker during the transition period.
+// In case the sensor already has the given state, it will start waiting immediately.
+// In case the sensor has a different state, it will wait until the expected state is observed for the first time.
 func (s *Sensor) WaitConsistent(ctx context.Context, state State, duration time.Duration) error {
+	// First read the sensors current state.
+	// It might be that the sensor doesn't receive any state change during the wait duration.
+	sensorState, err := s.State(ctx)
+	if err != nil {
+		return err
+	}
+
+	// If the current sensor state isn't what we are waiting for,
+	// reset the duration so we only start waiting once the expected status is observed for the first time.
+	startDuration := duration
+	if sensorState != state {
+		startDuration = 0
+	}
+
 	// Create a new timer without any duration.
-	timer := time.NewTimer(0)
+	timer := time.NewTimer(startDuration)
 	defer timer.Stop()
 
-	// As the timer was created without duration it will expire right away.
+	// As the timer could be created without duration, in this case it will expire right away.
 	// Read the expiry time from the channel so it's clean.
-	<-timer.C
+	if startDuration == 0 {
+		<-timer.C
+	}
 
 	return s.channel.RSession(func(protocol protocol.Reader) error {
 		commandC, cleanupF := protocol.Read()
