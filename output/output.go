@@ -55,20 +55,20 @@ func (o *Output) Persist(ctx context.Context, vpin VPin, iFlag IFlag) error {
 	})
 }
 
-func (o *Output) set(protocol protocol.ReadWriteCloser, value DigitalValue) error {
-	return protocol.Write(command.NewCommand(command.OpCodeOutput, "%d %c", o.id, value))
+func (o *Output) setCommand(value DigitalValue) *command.Command {
+	return command.NewCommand(command.OpCodeOutput, "%d %c", o.id, value)
 }
 
-func (o *Output) High() error {
-	return o.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		return o.set(protocol, High)
-	})
+func (o *Output) equalsCommandParams(params []string) bool {
+	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(o.id), 10)
 }
 
-func (o *Output) Low() error {
-	return o.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		return o.set(protocol, Low)
-	})
+func (o *Output) High(ctx context.Context) error {
+	return o.channel.WriteAndReadOpCode(ctx, o.setCommand(High), command.OpCodeOutputResponse, o.equalsCommandParams)
+}
+
+func (o *Output) Low(ctx context.Context) error {
+	return o.channel.WriteAndReadOpCode(ctx, o.setCommand(Low), command.OpCodeOutputResponse, o.equalsCommandParams)
 }
 
 func (o *Output) Status(ctx context.Context) (*Status, error) {
