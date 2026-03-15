@@ -67,20 +67,52 @@ func (t *TurnoutServo) Persist(ctx context.Context, vpin VPin, thrownPos Positio
 	})
 }
 
-func (t *TurnoutServo) setState(protocol protocol.ReadWriteCloser, state State) error {
-	return protocol.Write(command.NewCommand(command.OpCodeTurnout, "%d %c", t.id, state))
+func (t *TurnoutServo) setStateCommand(state State) *command.Command {
+	return command.NewCommand(command.OpCodeTurnout, "%d %c", t.id, state)
 }
 
-func (t *TurnoutServo) Throw() error {
-	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		return t.setState(protocol, StateThrown)
-	})
+func (t *TurnoutServo) equalsCommandParams(params []string) bool {
+	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(t.id), 10)
 }
 
-func (t *TurnoutServo) Close() error {
-	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		return t.setState(protocol, StateClosed)
-	})
+// Throw throws the servo turnout.
+// It first checks whether or not the turnout is already thrown.
+// Keep in mind that the check and actual throw are not inside the same session.
+func (t *TurnoutServo) Throw(ctx context.Context) error {
+	// Check if already thrown.
+	// There isn't a broadcast sent if the turnout is already thrown.
+	status, err := t.Examine(ctx)
+	if err != nil {
+		return err
+	}
+
+	if status.State == StateThrown {
+		return nil
+	}
+
+	stateCommand := t.setStateCommand(StateThrown)
+	return t.channel.WriteAndReadOpCode(ctx, stateCommand, command.OpCodeTurnoutResponse, t.equalsCommandParams)
+}
+
+// Close closes the servo turnout.
+// It first checks whether or not the turnout is already closed.
+// Keep in mind that the check and actual close are not inside the same session.
+func (t *TurnoutServo) Close(ctx context.Context) error {
+	// Check if already closed.
+	// There isn't a broadcast sent if the turnout is already closed.
+	status, err := t.Examine(ctx)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("close turnout", t.id, status.State == StateClosed)
+
+	if status.State == StateClosed {
+		return nil
+	}
+
+	stateCommand := t.setStateCommand(StateClosed)
+	return t.channel.WriteAndReadOpCode(ctx, stateCommand, command.OpCodeTurnoutResponse, t.equalsCommandParams)
 }
 
 // Examine returns the status of the servo.
@@ -96,7 +128,7 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		})
 
 		g.Go(func() error {
-			return t.setState(protocol, StateExamine)
+			return protocol.Write(t.setStateCommand(StateExamine))
 		})
 
 		return g.Wait()
@@ -134,9 +166,14 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		return nil, fmt.Errorf("invalid profile %q: %w", parameters[5], err)
 	}
 
-	state := []rune(parameters[6])
-	if len(state) != 1 {
+	// State is returned as 0 or 1, not C and T.
+	if parameters[6] != "0" && parameters[6] != "1" {
 		return nil, fmt.Errorf("invalid state %q", parameters[6])
+	}
+
+	state := StateClosed
+	if parameters[6] == "1" {
+		state = StateThrown
 	}
 
 	status := &TurnoutServoStatus{
@@ -144,7 +181,7 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		ThrownPosition: Position(thrownPosition),
 		ClosedPosition: Position(closedPosition),
 		Profile:        Profile(profile),
-		State:          State(state[0]),
+		State:          state,
 	}
 
 	return status, nil
