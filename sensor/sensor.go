@@ -187,18 +187,23 @@ func (s *Sensor) Persist(ctx context.Context, vpin VPin, pullUp PullUp) error {
 }
 
 func (s *Sensor) Active(ctx context.Context) bool {
-	isActive := false
+	sensorState, err := s.State(ctx)
+	if err != nil {
+		return false
+	}
+
+	return sensorState == StateActive
+}
+
+func (s *Sensor) State(ctx context.Context) (State, error) {
+	sensorState := StateInactive
+
 	err := s.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		commandC, cleanupF := protocol.Read()
 		defer cleanupF()
 
-		g := &errgroup.Group{}
-		g.Go(func() error {
-			// Send a control command to allow waiting for the end of the output.
-			return protocol.Write(command.NewControlCommand(StateActive.OpCode()))
-		})
-
-		err := g.Wait()
+		// Send a control command to allow waiting for the end of the output.
+		err := protocol.Write(command.NewControlCommand(StateActive.OpCode(), ""))
 		if err != nil {
 			return err
 		}
@@ -215,7 +220,8 @@ func (s *Sensor) Active(ctx context.Context) bool {
 				if cmd.OpCode() == StateActive.OpCode() {
 					params, err := cmd.ParametersStrings()
 					if err == nil && len(params) == 1 && params[0] == strconv.FormatUint(uint64(s.id), 10) {
-						isActive = true
+						sensorState = StateActive
+						return nil
 					}
 				}
 			case <-ctx.Done():
@@ -224,8 +230,8 @@ func (s *Sensor) Active(ctx context.Context) bool {
 		}
 	})
 	if err != nil {
-		return false
+		return sensorState, err
 	}
 
-	return isActive
+	return sensorState, nil
 }

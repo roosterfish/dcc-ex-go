@@ -9,6 +9,8 @@ import (
 type OpCode rune
 
 const (
+	// Used in error scenarios.
+	OpCodeNull                 OpCode = '0'
 	OpCodeInfo                 OpCode = '@'
 	OpCodeSuccess              OpCode = 'O'
 	OpCodeFail                 OpCode = 'X'
