@@ -83,6 +83,7 @@ func (p *Protocol) listen(firstSubscriber chan bool) {
 	notifyF := func(stringCommand string) {
 		command, err := command.NewCommandFromString(stringCommand)
 		if err != nil {
+			// TODO: Log as it means we are dropping ingress commands
 			return
 		}
 
@@ -108,8 +109,12 @@ func (p *Protocol) listen(firstSubscriber chan bool) {
 
 	commandRunes := []rune{}
 	commandReading := false
-	buf := make([]byte, 100)
+
 	for {
+		// Always create a new buffer for every read.
+		// This ensures there aren't any leftover traces from the previous read.
+		buf := make([]byte, 100)
+
 		n, err := p.port.Read(buf)
 		if err != nil {
 			return
@@ -129,6 +134,7 @@ func (p *Protocol) listen(firstSubscriber chan bool) {
 
 				commandReading = false
 				commandRunes = []rune{}
+				continue
 			}
 
 			// Filter out newlines.
