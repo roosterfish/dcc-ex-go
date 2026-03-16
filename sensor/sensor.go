@@ -221,7 +221,11 @@ func (s *Sensor) State(ctx context.Context) (State, error) {
 					params, err := cmd.ParametersStrings()
 					if err == nil && len(params) == 1 && params[0] == strconv.FormatUint(uint64(s.id), 10) {
 						sensorState = StateActive
-						return nil
+
+						// Don't yet return as there might be more commands.
+						// Only return once the failure op code is observed.
+						// Otherwise we might leak the failure op code into the following session.
+						continue
 					}
 				}
 			case <-ctx.Done():
