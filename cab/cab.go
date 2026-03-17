@@ -8,7 +8,6 @@ import (
 
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
-	"github.com/roosterfish/dcc-ex-go/protocol"
 )
 
 // CabDirection can be either 0 or 1.
@@ -132,19 +131,32 @@ func (c *Cab) Function(ctx context.Context, funct Function, state FunctionState)
 }
 
 func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
-	var responseCommand *command.Command
-	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeCabResponse)
+	var status *CabStatus
 
-		err := protocol.Write(command.NewCommand(command.OpCodeCabSpeed, "%d", c.address))
+	statusCommand := command.NewCommand(command.OpCodeCabSpeed, "%d", c.address)
+	err := c.channel.WriteAndReadOpCode(ctx, statusCommand, command.OpCodeCabResponse, func(cmd *command.Command) error {
+		params, err := cmd.ParametersStrings()
 		if err != nil {
 			return err
 		}
 
-		<-waiter.WaitC
-		responseCommand = waiter.Command()
-		if responseCommand == nil {
-			return errors.New("status response is missing")
+		if len(params) != 4 {
+			return fmt.Errorf("invalid command: %q", cmd.String())
+		}
+
+		speedByte, err := strconv.ParseUint(params[2], 10, 8)
+		if err != nil {
+			return fmt.Errorf("invalid speed byte %q: %w", params[2], err)
+		}
+
+		functMap, err := strconv.ParseUint(params[3], 10, 16)
+		if err != nil {
+			return fmt.Errorf("invalid funct map %q: %w", params[3], err)
+		}
+
+		status = &CabStatus{
+			SpeedByte: uint8(speedByte),
+			FunctMap:  uint8(functMap),
 		}
 
 		return nil
@@ -153,28 +165,8 @@ func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
 		return nil, fmt.Errorf("failed to get status of cab %d: %w", c.address, err)
 	}
 
-	parameters, err := responseCommand.ParametersStrings()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(parameters) != 4 {
-		return nil, fmt.Errorf("invalid command: %q", responseCommand.String())
-	}
-
-	speedByte, err := strconv.ParseUint(parameters[2], 10, 8)
-	if err != nil {
-		return nil, fmt.Errorf("invalid speed byte %q: %w", parameters[2], err)
-	}
-
-	functMap, err := strconv.ParseUint(parameters[3], 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("invalid funct map %q: %w", parameters[3], err)
-	}
-
-	status := &CabStatus{
-		SpeedByte: uint8(speedByte),
-		FunctMap:  uint8(functMap),
+	if status == nil {
+		return nil, errors.New("status response is missing")
 	}
 
 	return status, nil
