@@ -18,6 +18,12 @@ type CommandC chan *command.Command
 type WriteF func(*command.Command) error
 type CleanupF func()
 
+type Waiter struct {
+	command *command.Command
+
+	WaitC chan struct{}
+}
+
 type Config struct {
 	RequireSubscriber bool
 }
@@ -40,7 +46,7 @@ type Protocol struct {
 type Reader interface {
 	Read() (CommandC, CleanupF)
 	ReadCommand(ctx context.Context, command *command.Command) error
-	ReadOpCode(ctx context.Context, opCode command.OpCode) (*command.Command, error)
+	ReadOpCode(ctx context.Context, opCode command.OpCode) *Waiter
 }
 
 type Writer interface {
@@ -55,6 +61,10 @@ type ReadWriteCloser interface {
 	Reader
 	Writer
 	Closer
+}
+
+func (w Waiter) Command() *command.Command {
+	return w.command
 }
 
 // NewProtocol returns a new protocol wrapping the given connection (port).
@@ -242,21 +252,37 @@ func (p *Protocol) ReadCommand(ctx context.Context, command *command.Command) er
 	}
 }
 
-// ReadOpCode waits until the given op code was observed on the underlying connection and returns the corresponding command.
-func (p *Protocol) ReadOpCode(ctx context.Context, opCode command.OpCode) (*command.Command, error) {
+// ReadOpCode returns a channel which gets closed once the provided op code was observed.
+// Once the channel is returned, it is ensured there is an activer reader.
+func (p *Protocol) ReadOpCode(ctx context.Context, opCode command.OpCode) *Waiter {
 	commandC, cleanupF := p.Read()
-	defer cleanupF()
 
-	for {
-		select {
-		case cmd := <-commandC:
-			if cmd.OpCode() == opCode {
-				return cmd, nil
-			}
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	// Once the op code is observed, the channel gets closed.
+	waiter := &Waiter{
+		WaitC: make(chan struct{}),
 	}
+
+	go func() {
+		// Cleanup the reader.
+		defer cleanupF()
+		// Close the channel.
+		defer close(waiter.WaitC)
+
+		for {
+			select {
+			case cmd := <-commandC:
+				if cmd.OpCode() == opCode {
+					// Make the actual command available in the waiter.
+					waiter.command = cmd
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return waiter
 }
 
 // Write writes a new command onto the protocol's underlying connection.
