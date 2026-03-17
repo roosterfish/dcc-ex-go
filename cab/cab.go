@@ -8,7 +8,6 @@ import (
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 // CabDirection can be either 0 or 1.
@@ -124,19 +123,16 @@ func (c *Cab) Function(ctx context.Context, funct Function, state FunctionState)
 func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
 	var responseCommand *command.Command
 	err := c.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
-		g, ctx := errgroup.WithContext(ctx)
+		waiter := protocol.ReadOpCode(ctx, command.OpCodeCabResponse)
 
-		g.Go(func() error {
-			var err error
-			responseCommand, err = protocol.ReadOpCode(ctx, command.OpCodeCabResponse)
+		err := protocol.Write(command.NewCommand(command.OpCodeCabSpeed, "%d", c.address))
+		if err != nil {
 			return err
-		})
+		}
 
-		g.Go(func() error {
-			return protocol.Write(command.NewCommand(command.OpCodeCabSpeed, "%d", c.address))
-		})
-
-		return g.Wait()
+		<-waiter.WaitC
+		responseCommand = waiter.Command()
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status of cab %d: %w", c.address, err)
