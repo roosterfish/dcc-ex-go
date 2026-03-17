@@ -2,6 +2,7 @@ package station
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -111,6 +112,10 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 
 		<-waiter.WaitC
 		responseCommand = waiter.Command()
+		if responseCommand == nil {
+			return errors.New("status response is missing")
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -149,6 +154,10 @@ func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
 
 		<-waiter.WaitC
 		responseCommand = waiter.Command()
+		if responseCommand == nil {
+			return errors.New("supported cabs response is missing")
+		}
+
 		return nil
 	})
 	if err != nil {

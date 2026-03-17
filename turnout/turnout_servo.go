@@ -137,8 +137,9 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		<-waiter.WaitC
 		responseCommand = waiter.Command()
 		if responseCommand == nil {
-			return errors.New("status is missing")
+			return errors.New("status response is missing")
 		}
+
 		return nil
 	})
 	if err != nil {

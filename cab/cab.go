@@ -2,6 +2,7 @@ package cab
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -137,6 +138,10 @@ func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
 
 		<-waiter.WaitC
 		responseCommand = waiter.Command()
+		if responseCommand == nil {
+			return errors.New("status response is missing")
+		}
+
 		return nil
 	})
 	if err != nil {
