@@ -42,9 +42,13 @@ func (o *Output) Persist(ctx context.Context, vpin VPin, iFlag IFlag) error {
 
 		g, ctx := errgroup.WithContext(ctx)
 
+		// Ensure there is a reader before writing.
+		// Use the errgroup's context as we later wait for the commandC in a routine.
+		waiter := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
+
 		g.Go(func() error {
-			_, err := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
-			return err
+			<-waiter.WaitC
+			return nil
 		})
 
 		g.Go(func() error {
