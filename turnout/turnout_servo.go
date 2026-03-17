@@ -2,6 +2,7 @@ package turnout
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -54,9 +55,13 @@ func (t *TurnoutServo) Persist(ctx context.Context, vpin VPin, thrownPos Positio
 
 		g, ctx := errgroup.WithContext(ctx)
 
+		// Ensure there is a reader before writing.
+		// Use the errgroup's context as we later wait for the commandC in a routine.
+		waiter := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
+
 		g.Go(func() error {
-			_, err := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
-			return err
+			<-waiter.WaitC
+			return nil
 		})
 
 		g.Go(func() error {
@@ -117,19 +122,19 @@ func (t *TurnoutServo) Close(ctx context.Context) error {
 func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error) {
 	var responseCommand *command.Command
 	err := t.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
-		g, ctx := errgroup.WithContext(ctx)
+		waiter := protocol.ReadOpCode(ctx, command.OpCodeTurnoutResponse)
 
-		g.Go(func() error {
-			var err error
-			responseCommand, err = protocol.ReadOpCode(ctx, command.OpCodeTurnoutResponse)
+		err := protocol.Write(t.setStateCommand(StateExamine))
+		if err != nil {
 			return err
-		})
+		}
 
-		g.Go(func() error {
-			return protocol.Write(t.setStateCommand(StateExamine))
-		})
-
-		return g.Wait()
+		<-waiter.WaitC
+		responseCommand = waiter.Command()
+		if responseCommand == nil {
+			return errors.New("status is missing")
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to examine turnout %d: %w", t.id, err)
