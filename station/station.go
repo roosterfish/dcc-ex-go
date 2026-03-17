@@ -48,16 +48,17 @@ func (s PowerState) OpCode() command.OpCode {
 
 // Console returns a channel and writer which can be used to retrieve and send
 // commands from and to the command station.
-// It exposes the underlying protocol utilities directly by breaking out of the channel's session. Use it with care.
-// Writing commands might influence concurrent sessions.
-func (c *CommandStation) Console() (protocol.CommandC, protocol.WriteF, protocol.CleanupF) {
+// It exposes the underlying protocol and channel utilities directly.
+// Writing commands is protected using an exclusive session.
+// Reading commands is happening outside of any session.
+func (c *CommandStation) Console() (protocol.CommandC, channel.WriteF, protocol.CleanupF) {
 	var commandC protocol.CommandC
 	var cleanupF protocol.CleanupF
-	var writeF protocol.WriteF
+	var writeF channel.WriteF
 
 	_ = c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		commandC, cleanupF = protocol.Read()
-		writeF = protocol.Write
+		writeF = c.channel.Write
 		return nil
 	})
 
@@ -127,41 +128,34 @@ func (c *CommandStation) Ready(ctx context.Context) error {
 
 // Status returns DCC-EX version and hardware info, along with defined turnouts.
 func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
-	var responseCommand *command.Command
-	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeStatusResponse)
+	var status *Status
 
-		err := protocol.Write(command.NewCommand(command.OpCodeStatus, ""))
+	statusCommand := command.NewCommand(command.OpCodeStatus, "")
+	err := c.channel.WriteAndReadOpCode(ctx, statusCommand, command.OpCodeStatusResponse, func(cmd *command.Command) error {
+		params, err := cmd.ParametersStrings()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed getting command station command parameters: %w", err)
 		}
 
-		<-waiter.WaitC
-		responseCommand = waiter.Command()
-		if responseCommand == nil {
-			return errors.New("status response is missing")
+		if len(params) != 7 {
+			return fmt.Errorf("invalid command station command parameter length %q", len(params))
+		}
+
+		status = &Status{
+			Version:             params[1],
+			MicroprocessorType:  params[3],
+			MotorcontrollerType: params[5],
+			BuildNumber:         params[6],
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get command station status: %w", err)
 	}
 
-	parameters, err := responseCommand.ParametersStrings()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(parameters) != 7 {
-		return nil, fmt.Errorf("invalid command: %q", responseCommand.String())
-	}
-
-	status := &Status{
-		Version:             parameters[1],
-		MicroprocessorType:  parameters[3],
-		MotorcontrollerType: parameters[5],
-		BuildNumber:         parameters[6],
+	if status == nil {
+		return nil, errors.New("failed to find status for command station")
 	}
 
 	return status, nil
@@ -169,40 +163,35 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 
 // SupportedCabs returns the number of supported cabs.
 func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
-	var responseCommand *command.Command
-	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeStationSupportedCabs)
+	var supportedCabs *int
 
-		err := protocol.Write(command.NewCommand(command.OpCodeStationSupportedCabs, ""))
+	supportedCabsCommand := command.NewCommand(command.OpCodeStationSupportedCabs, "")
+	err := c.channel.WriteAndReadOpCode(ctx, supportedCabsCommand, command.OpCodeStationSupportedCabs, func(cmd *command.Command) error {
+		params, err := cmd.ParametersStrings()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed getting supported cabs command parameters: %w", err)
 		}
 
-		<-waiter.WaitC
-		responseCommand = waiter.Command()
-		if responseCommand == nil {
-			return errors.New("supported cabs response is missing")
+		if len(params) != 1 {
+			return fmt.Errorf("invalid supported cabs command parameter length %q", len(params))
 		}
+
+		supportedCabsResponse, err := strconv.Atoi(params[0])
+		if err != nil {
+			return fmt.Errorf("failed to convert supported cabs to int: %w", err)
+		}
+
+		supportedCabs = &supportedCabsResponse
 
 		return nil
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get supported cabs: %w", err)
 	}
 
-	parameters, err := responseCommand.ParametersStrings()
-	if err != nil {
-		return 0, err
+	if supportedCabs == nil {
+		return 0, errors.New("failed to find supported cabs")
 	}
 
-	if len(parameters) != 1 {
-		return 0, fmt.Errorf("Invalid command: %q", responseCommand.String())
-	}
-
-	supportedCabs, err := strconv.Atoi(parameters[0])
-	if err != nil {
-		return 0, fmt.Errorf("Failed to convert supported cabs to int: %w", err)
-	}
-
-	return supportedCabs, nil
+	return *supportedCabs, nil
 }
