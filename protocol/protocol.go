@@ -15,7 +15,6 @@ import (
 type Observation struct{}
 type ObservationsC chan Observation
 type CommandC chan *command.Command
-type WriteF func(*command.Command) error
 type CleanupF func()
 
 type Waiter struct {
