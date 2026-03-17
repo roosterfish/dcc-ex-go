@@ -76,13 +76,18 @@ func (t *TurnoutServo) setStateCommand(state State) *command.Command {
 	return command.NewCommand(command.OpCodeTurnout, "%d %c", t.id, state)
 }
 
-func (t *TurnoutServo) equalsCommandParams(cmd *command.Command) (bool, error) {
+func (t *TurnoutServo) equalsCommandParams(cmd *command.Command) error {
 	params, err := cmd.ParametersStrings()
 	if err != nil {
-		return false, fmt.Errorf("failed getting turnout servo command parameters: %w", err)
+		return fmt.Errorf("failed getting turnout servo command parameters: %w", err)
 	}
 
-	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(t.id), 10), nil
+	turnoutMatch := len(params) == 2 && params[0] == strconv.FormatUint(uint64(t.id), 10)
+	if !turnoutMatch {
+		return fmt.Errorf("invalid response for turnout servo %d: %q", t.id, cmd.String())
+	}
+
+	return nil
 }
 
 // Throw throws the servo turnout.
@@ -126,7 +131,7 @@ func (t *TurnoutServo) Close(ctx context.Context) error {
 // Examine returns the status of the servo.
 func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error) {
 	var responseCommand *command.Command
-	err := t.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
+	err := t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		waiter := protocol.ReadOpCode(ctx, command.OpCodeTurnoutResponse)
 
 		err := protocol.Write(t.setStateCommand(StateExamine))
