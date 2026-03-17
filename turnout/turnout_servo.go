@@ -2,14 +2,11 @@ package turnout
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
-	"github.com/roosterfish/dcc-ex-go/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 type ID uint16
@@ -47,29 +44,23 @@ func NewTurnoutServo(id ID, channel *channel.Channel) *TurnoutServo {
 
 // Persist creates the turnout and persists its definition in the EEPROM.
 func (t *TurnoutServo) Persist(ctx context.Context, vpin VPin, thrownPos Position, closedPos Position, profile Profile) error {
-	return t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		err := protocol.Write(command.NewCommand(command.OpCodeTurnout, "%d SERVO %d %d %d %d", t.id, vpin, thrownPos, closedPos, profile))
-		if err != nil {
-			return fmt.Errorf("failed to create sensor: %w", err)
-		}
+	turnoutCommand := command.NewCommand(command.OpCodeTurnout, "%d SERVO %d %d %d %d", t.id, vpin, thrownPos, closedPos, profile)
+	persistCommand := command.NewCommand(command.OpCodeEEPROM, "")
 
-		g, ctx := errgroup.WithContext(ctx)
-
-		// Ensure there is a reader before writing.
-		// Use the errgroup's context as we later wait for the commandC in a routine.
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
-
-		g.Go(func() error {
-			<-waiter.WaitC
-			return nil
-		})
-
-		g.Go(func() error {
-			return protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
-		})
-
-		return g.Wait()
+	persisted := false
+	err := t.channel.WriteAndReadOpCode(ctx, turnoutCommand.Append(persistCommand), command.OpCodeSuccess, func(cmd *command.Command) error {
+		persisted = true
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if !persisted {
+		return fmt.Errorf("failed to persist turnout servo %d: %w", t.id, err)
+	}
+
+	return nil
 }
 
 func (t *TurnoutServo) setStateCommand(state State) *command.Command {
@@ -130,72 +121,64 @@ func (t *TurnoutServo) Close(ctx context.Context) error {
 
 // Examine returns the status of the servo.
 func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error) {
-	var responseCommand *command.Command
-	err := t.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeTurnoutResponse)
+	var status *TurnoutServoStatus
 
-		err := protocol.Write(t.setStateCommand(StateExamine))
+	err := t.channel.WriteAndReadOpCode(ctx, t.setStateCommand(StateExamine), command.OpCodeTurnoutResponse, func(cmd *command.Command) error {
+		params, err := cmd.ParametersStrings()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed getting turnout servo command parameters: %w", err)
 		}
 
-		<-waiter.WaitC
-		responseCommand = waiter.Command()
-		if responseCommand == nil {
-			return errors.New("status response is missing")
+		if len(params) != 7 {
+			return fmt.Errorf("invalid turnout servo command parameter length %q", len(params))
+		}
+
+		vPin, err := strconv.ParseUint(params[2], 10, 16)
+		if err != nil {
+			return fmt.Errorf("invalid vpin %q: %w", params[2], err)
+		}
+
+		thrownPosition, err := strconv.ParseUint(params[3], 10, 16)
+		if err != nil {
+			return fmt.Errorf("invalid thrown position %q: %w", params[3], err)
+		}
+
+		closedPosition, err := strconv.ParseUint(params[4], 10, 16)
+		if err != nil {
+			return fmt.Errorf("invalid closed position %q: %w", params[4], err)
+		}
+
+		profile, err := strconv.ParseUint(params[5], 10, 8)
+		if err != nil {
+			return fmt.Errorf("invalid profile %q: %w", params[5], err)
+		}
+
+		// State is returned as 0 or 1, not C and T.
+		if params[6] != "0" && params[6] != "1" {
+			return fmt.Errorf("invalid state %q", params[6])
+		}
+
+		state := StateClosed
+		if params[6] == "1" {
+			state = StateThrown
+		}
+
+		status = &TurnoutServoStatus{
+			VPin:           VPin(vPin),
+			ThrownPosition: Position(thrownPosition),
+			ClosedPosition: Position(closedPosition),
+			Profile:        Profile(profile),
+			State:          state,
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to examine turnout %d: %w", t.id, err)
+		return nil, fmt.Errorf("failed to get turnout servo %d status: %w", t.id, err)
 	}
 
-	parameters, err := responseCommand.ParametersStrings()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(parameters) != 7 {
-		return nil, fmt.Errorf("invalid command: %q", responseCommand.String())
-	}
-
-	vPin, err := strconv.ParseUint(parameters[2], 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("invalid vpin %q: %w", parameters[2], err)
-	}
-
-	thrownPosition, err := strconv.ParseUint(parameters[3], 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("invalid thrown position %q: %w", parameters[3], err)
-	}
-
-	closedPosition, err := strconv.ParseUint(parameters[4], 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("invalid closed position %q: %w", parameters[4], err)
-	}
-
-	profile, err := strconv.ParseUint(parameters[5], 10, 8)
-	if err != nil {
-		return nil, fmt.Errorf("invalid profile %q: %w", parameters[5], err)
-	}
-
-	// State is returned as 0 or 1, not C and T.
-	if parameters[6] != "0" && parameters[6] != "1" {
-		return nil, fmt.Errorf("invalid state %q", parameters[6])
-	}
-
-	state := StateClosed
-	if parameters[6] == "1" {
-		state = StateThrown
-	}
-
-	status := &TurnoutServoStatus{
-		VPin:           VPin(vPin),
-		ThrownPosition: Position(thrownPosition),
-		ClosedPosition: Position(closedPosition),
-		Profile:        Profile(profile),
-		State:          state,
+	if status == nil {
+		return nil, fmt.Errorf("failed to find status for turnout servo %d", t.id)
 	}
 
 	return status, nil
