@@ -7,8 +7,6 @@ import (
 
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
-	"github.com/roosterfish/dcc-ex-go/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 type ID uint16
@@ -34,29 +32,23 @@ func NewOutput(id ID, channel *channel.Channel) *Output {
 
 // Persist creates the output and persists its definition in the EEPROM.
 func (o *Output) Persist(ctx context.Context, vpin VPin, iFlag IFlag) error {
-	return o.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		err := protocol.Write(command.NewCommand(command.OpCodeOutput, "%d %d %d", o.id, vpin, iFlag))
-		if err != nil {
-			return fmt.Errorf("failed to create output: %w", err)
-		}
+	outputCommand := command.NewCommand(command.OpCodeOutput, "%d %d %d", o.id, vpin, iFlag)
+	persistCommand := command.NewCommand(command.OpCodeEEPROM, "")
 
-		g, ctx := errgroup.WithContext(ctx)
-
-		// Ensure there is a reader before writing.
-		// Use the errgroup's context as we later wait for the commandC in a routine.
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
-
-		g.Go(func() error {
-			<-waiter.WaitC
-			return nil
-		})
-
-		g.Go(func() error {
-			return protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
-		})
-
-		return g.Wait()
+	persisted := false
+	err := o.channel.WriteAndReadOpCode(ctx, outputCommand.Append(persistCommand), command.OpCodeSuccess, func(cmd *command.Command) error {
+		persisted = true
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if !persisted {
+		return fmt.Errorf("failed to persist output %d: %w", o.id, err)
+	}
+
+	return nil
 }
 
 func (o *Output) setCommand(value DigitalValue) *command.Command {
@@ -128,7 +120,7 @@ func (o *Output) Status(ctx context.Context) (*Status, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get output status: %w", err)
+		return nil, fmt.Errorf("failed to get output %d status: %w", o.id, err)
 	}
 
 	if outputStatus == nil {
