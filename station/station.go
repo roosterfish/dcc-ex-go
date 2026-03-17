@@ -91,7 +91,7 @@ func (c *CommandStation) Ready(ctx context.Context) error {
 // Status returns DCC-EX version and hardware info, along with defined turnouts.
 func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 	var responseCommand *command.Command
-	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+	err := c.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
 		waiter := protocol.ReadOpCode(ctx, command.OpCodeStatusResponse)
 
 		err := protocol.Write(command.NewCommand(command.OpCodeStatus, ""))
@@ -129,7 +129,7 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 // SupportedCabs returns the number of supported cabs.
 func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
 	var responseCommand *command.Command
-	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
+	err := c.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
 		waiter := protocol.ReadOpCode(ctx, command.OpCodeStationSupportedCabs)
 
 		err := protocol.Write(command.NewCommand(command.OpCodeStationSupportedCabs, ""))
