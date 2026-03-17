@@ -9,9 +9,9 @@ import (
 )
 
 // WriteAndReadOpCode abstracts an underlying read/write session by writing the given command and waiting for a response with the given op code.
-// Once the op code is observed, the given function f is called with the commands's parameters.
+// Once the op code is observed, the given function f is called with the observed command.
 // It will continue to read commands until the function f returns true or the context is done.
-func (c *Channel) WriteAndReadOpCode(ctx context.Context, cmd *command.Command, o command.OpCode, f func(cmd []string) bool) error {
+func (c *Channel) WriteAndReadOpCode(ctx context.Context, cmd *command.Command, o command.OpCode, f func(cmd *command.Command) (bool, error)) error {
 	return c.Session(func(protocol protocol.ReadWriteCloser) error {
 		commandC, cleanupF := protocol.Read()
 		defer cleanupF()
@@ -25,12 +25,12 @@ func (c *Channel) WriteAndReadOpCode(ctx context.Context, cmd *command.Command, 
 			select {
 			case cmd := <-commandC:
 				if cmd.OpCode() == o {
-					params, err := cmd.ParametersStrings()
+					ok, err := f(cmd)
 					if err != nil {
-						return fmt.Errorf("failed to parse command %q: %w", cmd.String(), err)
+						return fmt.Errorf("failed to run function: %w", err)
 					}
 
-					if f(params) {
+					if ok {
 						return nil
 					}
 				}
