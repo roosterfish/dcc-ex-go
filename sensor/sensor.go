@@ -202,40 +202,19 @@ func (s *Sensor) Active(ctx context.Context) bool {
 func (s *Sensor) State(ctx context.Context) (State, error) {
 	sensorState := StateInactive
 
-	err := s.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		commandC, cleanupF := protocol.Read()
-		defer cleanupF()
-
-		// Send a control command to allow waiting for the end of the output.
-		err := protocol.Write(command.NewControlCommand(StateActive.OpCode(), ""))
+	stateCommand := command.NewCommand(StateActive.OpCode(), "")
+	err := s.channel.WriteAndReadOpCode(ctx, stateCommand, StateActive.OpCode(), func(cmd *command.Command) error {
+		params, err := cmd.ParametersStrings()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed getting sensor command parameters: %w", err)
 		}
 
-		for {
-			select {
-			case cmd := <-commandC:
-				// Loop through the received commands until observing the end of the output.
-				// This is indicated by the fail opcode as we have sent an invalid control command.
-				if cmd.OpCode() == command.OpCodeFail {
-					return nil
-				}
-
-				if cmd.OpCode() == StateActive.OpCode() {
-					params, err := cmd.ParametersStrings()
-					if err == nil && len(params) == 1 && params[0] == strconv.FormatUint(uint64(s.id), 10) {
-						sensorState = StateActive
-
-						// Don't yet return as there might be more commands.
-						// Only return once the failure op code is observed.
-						// Otherwise we might leak the failure op code into the following session.
-						continue
-					}
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+		if len(params) == 1 && params[0] == strconv.FormatUint(uint64(s.id), 10) {
+			sensorState = StateActive
+			return nil
 		}
+
+		return nil
 	})
 	if err != nil {
 		return sensorState, err
