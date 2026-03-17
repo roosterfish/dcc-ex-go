@@ -66,29 +66,55 @@ func (c *CommandStation) Console() (protocol.CommandC, protocol.WriteF, protocol
 
 // Power sets the power to the given state.
 func (c *CommandStation) Power(ctx context.Context, state PowerState) error {
-	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), ""), command.OpCodePower, func(cmd *command.Command) (bool, error) {
+	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), ""), command.OpCodePower, func(cmd *command.Command) error {
 		params, err := cmd.ParametersStrings()
 		if err != nil {
-			return false, fmt.Errorf("failed getting command station command parameters: %w", err)
+			return fmt.Errorf("failed getting command station command parameters: %w", err)
 		}
 
-		return len(params) == 1 && params[0] == string(state), nil
+		powerMatch := len(params) == 1 && params[0] == string(state)
+		if !powerMatch {
+			return fmt.Errorf("invalid response for power command: %q", cmd.String())
+		}
+
+		return nil
 	})
 }
 
 // PowerTrack sets the tracks power to the given state.
 func (c *CommandStation) PowerTrack(ctx context.Context, state PowerState, track Track) error {
-	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), "%s", track), command.OpCodePower, func(cmd *command.Command) (bool, error) {
+	powerChanged := false
+
+	err := c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), "%s", track), command.OpCodeInfo, func(cmd *command.Command) error {
 		params, err := cmd.ParametersStrings()
 		if err != nil {
-			return false, fmt.Errorf("failed getting command station command parameters: %w", err)
+			return fmt.Errorf("failed getting command station command parameters: %w", err)
 		}
 
-		// Powering on returns the track in the response.
-		// Powering down doesn't mention the track in the broadcast.
-		// Therefore check if param len is >= 1 and only check the state.
-		return len(params) >= 1 && params[0] == string(state), nil
+		// Powering on/off returns various broadcasts:
+		// <1 MAIN> <@ 0 2 "PWR Ab">
+		// <0 MAIN> <@ 0 2 "PWR Off">
+		// <1 PROG> <@ 0 2 "PWR aB">
+		// <0 PROG> <@ 0 2 "PWR Off">
+		// <1 JOIN> <@ 0 2 "PWR On JOIN">
+		// <0 MAIN> <@ 0 2 "PWR aB">
+		// <0 PROG> <@ 0 2 "PWR Ab">
+		// Use the least common denominator <@ 0 2.
+		if len(params) == 3 && params[0] == "0" && params[1] == "2" {
+			powerChanged = true
+		}
+
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if !powerChanged {
+		return fmt.Errorf("failed to set power %q on track %q", state, track)
+	}
+
+	return nil
 }
 
 // Ready waits for the <@ 0 3 "Ready"> broadcast message which indicates the station is ready the receive commands.
@@ -102,7 +128,7 @@ func (c *CommandStation) Ready(ctx context.Context) error {
 // Status returns DCC-EX version and hardware info, along with defined turnouts.
 func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 	var responseCommand *command.Command
-	err := c.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
+	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		waiter := protocol.ReadOpCode(ctx, command.OpCodeStatusResponse)
 
 		err := protocol.Write(command.NewCommand(command.OpCodeStatus, ""))
@@ -144,7 +170,7 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 // SupportedCabs returns the number of supported cabs.
 func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
 	var responseCommand *command.Command
-	err := c.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
+	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		waiter := protocol.ReadOpCode(ctx, command.OpCodeStationSupportedCabs)
 
 		err := protocol.Write(command.NewCommand(command.OpCodeStationSupportedCabs, ""))
