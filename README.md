@@ -14,7 +14,7 @@ This allows the serialization of commands which expect one or more responses to 
 
 Sent commands are gated by a control command mechanism to mimic a request/response behavior over the serial connection.
 It allows the command station to work on one command at a time, even if there are multiple concurrent Go routines.
-As an effect the module is able to understand the end of a command's output as DCC-EX doesn't sent such markers.
+As an effect the module is able to understand the end of a command's output as DCC-EX doesn't send such markers.
 Furthermore we have a guarantee that the command station as well as the serial buffers aren't overloaded as DCC-EX
 itself controls the speed in which this module is sending commands onto the wire.
 
