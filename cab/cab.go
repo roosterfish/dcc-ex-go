@@ -60,8 +60,13 @@ func NewCab(address Address, channel *channel.Channel) *Cab {
 	}
 }
 
-func (c *Cab) equalsCommandParams(params []string) bool {
-	return len(params) == 4 && params[0] == strconv.FormatUint(uint64(c.address), 10)
+func (c *Cab) equalsCommandParams(cmd *command.Command) (bool, error) {
+	params, err := cmd.ParametersStrings()
+	if err != nil {
+		return false, fmt.Errorf("failed getting cab command parameters: %w", err)
+	}
+
+	return len(params) == 4 && params[0] == strconv.FormatUint(uint64(c.address), 10), nil
 }
 
 func (c *Cab) speedUnchanged(status *CabStatus, newSpeed Speed, newDirection Direction) bool {

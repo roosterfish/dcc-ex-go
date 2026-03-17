@@ -65,18 +65,28 @@ func (c *CommandStation) Console() (protocol.CommandC, protocol.WriteF, protocol
 
 // Power sets the power to the given state.
 func (c *CommandStation) Power(ctx context.Context, state PowerState) error {
-	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), ""), command.OpCodePower, func(cmd []string) bool {
-		return len(cmd) == 1 && cmd[0] == string(state)
+	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), ""), command.OpCodePower, func(cmd *command.Command) (bool, error) {
+		params, err := cmd.ParametersStrings()
+		if err != nil {
+			return false, fmt.Errorf("failed getting command station command parameters: %w", err)
+		}
+
+		return len(params) == 1 && params[0] == string(state), nil
 	})
 }
 
 // PowerTrack sets the tracks power to the given state.
 func (c *CommandStation) PowerTrack(ctx context.Context, state PowerState, track Track) error {
-	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), "%s", track), command.OpCodePower, func(cmd []string) bool {
+	return c.channel.WriteAndReadOpCode(ctx, command.NewCommand(state.OpCode(), "%s", track), command.OpCodePower, func(cmd *command.Command) (bool, error) {
+		params, err := cmd.ParametersStrings()
+		if err != nil {
+			return false, fmt.Errorf("failed getting command station command parameters: %w", err)
+		}
+
 		// Powering on returns the track in the response.
 		// Powering down doesn't mention the track in the broadcast.
 		// Therefore check if param len is >= 1 and only check the state.
-		return len(cmd) >= 1 && cmd[0] == string(state)
+		return len(params) >= 1 && params[0] == string(state), nil
 	})
 }
 

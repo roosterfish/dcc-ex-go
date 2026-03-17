@@ -76,8 +76,13 @@ func (t *TurnoutServo) setStateCommand(state State) *command.Command {
 	return command.NewCommand(command.OpCodeTurnout, "%d %c", t.id, state)
 }
 
-func (t *TurnoutServo) equalsCommandParams(params []string) bool {
-	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(t.id), 10)
+func (t *TurnoutServo) equalsCommandParams(cmd *command.Command) (bool, error) {
+	params, err := cmd.ParametersStrings()
+	if err != nil {
+		return false, fmt.Errorf("failed getting turnout servo command parameters: %w", err)
+	}
+
+	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(t.id), 10), nil
 }
 
 // Throw throws the servo turnout.

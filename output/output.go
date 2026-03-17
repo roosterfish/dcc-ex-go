@@ -63,8 +63,13 @@ func (o *Output) setCommand(value DigitalValue) *command.Command {
 	return command.NewCommand(command.OpCodeOutput, "%d %c", o.id, value)
 }
 
-func (o *Output) equalsCommandParams(params []string) bool {
-	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(o.id), 10)
+func (o *Output) equalsCommandParams(cmd *command.Command) (bool, error) {
+	params, err := cmd.ParametersStrings()
+	if err != nil {
+		return false, fmt.Errorf("failed getting output command parameters: %w", err)
+	}
+
+	return len(params) == 2 && params[0] == strconv.FormatUint(uint64(o.id), 10), nil
 }
 
 func (o *Output) High(ctx context.Context) error {
