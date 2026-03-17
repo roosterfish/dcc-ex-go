@@ -12,6 +12,7 @@ const (
 	// Used in error scenarios.
 	OpCodeNull                 OpCode = '0'
 	OpCodeInfo                 OpCode = '@'
+	OpCodeDescribe             OpCode = '*'
 	OpCodeSuccess              OpCode = 'O'
 	OpCodeFail                 OpCode = 'X'
 	OpCodeStatus               OpCode = 's'
@@ -46,15 +47,17 @@ func NewCommand(opCode OpCode, format string, parameters ...any) *Command {
 }
 
 // NewControlCommand returns a command's memory representation including a control command.
-// This control command cannot be interpreted by DCC-EX which causes a <X> sent at the end
-// of the output of the preceding valid command.
+// This control command cannot be interpreted by DCC-EX which causes a <*...><X> sent at the end
+// of the output of the preceeding valid command.
 // This allows identifying the end of output caused by any command.
-// An example control command would be <Q ><⚡> where the characters "><⚡" are internally represented
+// An example control command would be <Q ><X> where the characters "><X" are internally represented
 // as command parameters.
-// DCC-EX lists all of the sensors including their current state followed by a <X> as <⚡>
+// DCC-EX lists all of the sensors including their current state followed by a <*...><X> as <X>
 // is not a valid command.
+// Just sending a faulty command causes a simple <X> to be returned. This allows differentiating
+// between the control command and a faulty command.
 func NewControlCommand(opCode OpCode, format string, parameters ...any) *Command {
-	return NewCommand(opCode, format+"%s", append(parameters, "><⚡")...)
+	return NewCommand(opCode, format+"%s", append(parameters, "><X")...)
 }
 
 // NewCommandFromString creates a new command from the given string.
@@ -141,6 +144,14 @@ func (c *Command) Bytes() []byte {
 
 func (c *Command) OpCode() OpCode {
 	return c.opCode
+}
+
+func (c *Command) Format() string {
+	return c.format
+}
+
+func (c *Command) Parameters() []any {
+	return c.parameters
 }
 
 func (c *Command) ParametersStrings() ([]string, error) {
