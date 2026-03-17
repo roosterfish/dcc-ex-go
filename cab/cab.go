@@ -61,13 +61,18 @@ func NewCab(address Address, channel *channel.Channel) *Cab {
 	}
 }
 
-func (c *Cab) equalsCommandParams(cmd *command.Command) (bool, error) {
+func (c *Cab) equalsCommandParams(cmd *command.Command) error {
 	params, err := cmd.ParametersStrings()
 	if err != nil {
-		return false, fmt.Errorf("failed getting cab command parameters: %w", err)
+		return fmt.Errorf("failed getting cab command parameters: %w", err)
 	}
 
-	return len(params) == 4 && params[0] == strconv.FormatUint(uint64(c.address), 10), nil
+	cabMatch := len(params) == 4 && params[0] == strconv.FormatUint(uint64(c.address), 10)
+	if !cabMatch {
+		return fmt.Errorf("invalid response for cab %d: %q", c.address, cmd.String())
+	}
+
+	return nil
 }
 
 func (c *Cab) speedUnchanged(status *CabStatus, newSpeed Speed, newDirection Direction) bool {
@@ -128,7 +133,7 @@ func (c *Cab) Function(ctx context.Context, funct Function, state FunctionState)
 
 func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
 	var responseCommand *command.Command
-	err := c.channel.SessionSuccess(ctx, func(ctx context.Context, protocol protocol.ReadWriteCloser) error {
+	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
 		waiter := protocol.ReadOpCode(ctx, command.OpCodeCabResponse)
 
 		err := protocol.Write(command.NewCommand(command.OpCodeCabSpeed, "%d", c.address))
