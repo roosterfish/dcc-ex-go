@@ -4,12 +4,22 @@ This module contains Go bindings for the [DCC-EX](https://dcc-ex.com) native com
 It implements the commands outlined in the [summary](https://dcc-ex.com/reference/software/command-summary-consolidated.html) and
 uses Go's language features to easily interact with the various entities available in the [DCC-EX CommandStation](https://dcc-ex.com/ex-commandstation/index.html).
 
-As the underlying serial connection doesn't allow mapping the response(s) to the actual command the module offers the concept of a
+Control your trains, sensors, outputs and turnouts in DCC-EX using Go.
+
+## Protocol
+
+As the underlying serial connection doesn't allow mapping the response(s) to the actual command, the module offers the concept of a
 channel on which a caller can obtain either a rw (read/write) or ro (read-only) session.
 This allows the serialization of commands which expect one or more responses to be sent by DCC-EX.
-The logic of this is mostly hidden behind the individual package's functions.
 
-By far not all of the native commands are implemented yet.
+Sent commands are gated by a control command mechanism to mimic a request/response behavior over the serial connection.
+It allows the command station to work on one command at a time, even if there are multiple concurrent Go routines.
+As an effect the module is able to understand the end of a command's output as DCC-EX doesn't sent such markers.
+Furthermore we have a guarantee that the command station as well as the serial buffers aren't overloaded as DCC-EX
+itself controls the speed in which this module is sending commands onto the wire.
+
+The protocol logic is hidden behind the individual package's functions (e.g. `cab`, `sensor`, ...).
+This enables `dcc-ex-go` (and the single underlying serial connection) to be used in multiple routines as it is thread safe by design.
 
 ## Get started
 
