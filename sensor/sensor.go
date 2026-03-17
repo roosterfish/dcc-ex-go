@@ -10,7 +10,6 @@ import (
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 type ID uint16
@@ -165,29 +164,23 @@ func (s *Sensor) SetCallback(state State, f func(id ID, state State)) protocol.C
 
 // Persist creates the sensor and persists its definition in the EEPROM.
 func (s *Sensor) Persist(ctx context.Context, vpin VPin, pullUp PullUp) error {
-	return s.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		err := protocol.Write(command.NewCommand(command.OpCodeSensorCreate, "%d %d %d", s.id, vpin, pullUp))
-		if err != nil {
-			return fmt.Errorf("failed to create sensor: %w", err)
-		}
+	sensorCommand := command.NewCommand(command.OpCodeSensorCreate, "%d %d %d", s.id, vpin, pullUp)
+	persistCommand := command.NewCommand(command.OpCodeEEPROM, "")
 
-		g, ctx := errgroup.WithContext(ctx)
-
-		// Ensure there is a reader before writing.
-		// Use the errgroup's context as we later wait for the commandC in a routine.
-		waiter := protocol.ReadOpCode(ctx, command.OpCodeSuccess)
-
-		g.Go(func() error {
-			<-waiter.WaitC
-			return nil
-		})
-
-		g.Go(func() error {
-			return protocol.Write(command.NewCommand(command.OpCodeEEPROM, ""))
-		})
-
-		return g.Wait()
+	persisted := false
+	err := s.channel.WriteAndReadOpCode(ctx, sensorCommand.Append(persistCommand), command.OpCodeSuccess, func(cmd *command.Command) error {
+		persisted = true
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if !persisted {
+		return fmt.Errorf("failed to persist sensor %d: %w", s.id, err)
+	}
+
+	return nil
 }
 
 func (s *Sensor) Active(ctx context.Context) bool {
@@ -217,7 +210,7 @@ func (s *Sensor) State(ctx context.Context) (State, error) {
 		return nil
 	})
 	if err != nil {
-		return sensorState, err
+		return sensorState, fmt.Errorf("failed to get sensor %d status: %w", s.id, err)
 	}
 
 	return sensorState, nil
