@@ -8,7 +8,6 @@ import (
 	"github.com/roosterfish/dcc-ex-go/channel"
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 type PowerState command.OpCode
@@ -93,19 +92,16 @@ func (c *CommandStation) Ready(ctx context.Context) error {
 func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 	var responseCommand *command.Command
 	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		g, ctx := errgroup.WithContext(ctx)
+		waiter := protocol.ReadOpCode(ctx, command.OpCodeStatusResponse)
 
-		g.Go(func() error {
-			var err error
-			responseCommand, err = protocol.ReadOpCode(ctx, command.OpCodeStatusResponse)
+		err := protocol.Write(command.NewCommand(command.OpCodeStatus, ""))
+		if err != nil {
 			return err
-		})
+		}
 
-		g.Go(func() error {
-			return protocol.Write(command.NewCommand(command.OpCodeStatus, ""))
-		})
-
-		return g.Wait()
+		<-waiter.WaitC
+		responseCommand = waiter.Command()
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -134,19 +130,16 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
 	var responseCommand *command.Command
 	err := c.channel.Session(func(protocol protocol.ReadWriteCloser) error {
-		g, ctx := errgroup.WithContext(ctx)
+		waiter := protocol.ReadOpCode(ctx, command.OpCodeStationSupportedCabs)
 
-		g.Go(func() error {
-			var err error
-			responseCommand, err = protocol.ReadOpCode(ctx, command.OpCodeStationSupportedCabs)
+		err := protocol.Write(command.NewCommand(command.OpCodeStationSupportedCabs, ""))
+		if err != nil {
 			return err
-		})
+		}
 
-		g.Go(func() error {
-			return protocol.Write(command.NewCommand(command.OpCodeStationSupportedCabs, ""))
-		})
-
-		return g.Wait()
+		<-waiter.WaitC
+		responseCommand = waiter.Command()
+		return nil
 	})
 	if err != nil {
 		return 0, err
