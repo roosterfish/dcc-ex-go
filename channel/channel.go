@@ -63,13 +63,19 @@ func (c *Channel) SessionSuccess(ctx context.Context, sessionF func(ctx context.
 	earlyCancelCtx, earlyCancel := context.WithCancel(ctx)
 
 	g, ctx := errgroup.WithContext(earlyCancelCtx)
+
+	// Ensure there is a reader before running the sessionF (any writes) to not miss any responses.
+	waiter := c.protocol.ReadOpCode(ctx, command.OpCodeFail)
+
 	g.Go(func() error {
-		failCommand, err := c.protocol.ReadOpCode(ctx, command.OpCodeFail)
-		if err != nil {
-			return err
+		<-waiter.WaitC
+		failCommand := waiter.Command()
+
+		if failCommand != nil {
+			return fmt.Errorf("observed session failure after last command %q: %q", c.protocol.lastCommand().String(), failCommand.String())
 		}
 
-		return fmt.Errorf("observed session failure after last command %q: %q", c.protocol.lastCommand().String(), failCommand.String())
+		return nil
 	})
 
 	g.Go(func() error {
