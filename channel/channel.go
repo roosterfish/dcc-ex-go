@@ -1,13 +1,10 @@
 package channel
 
 import (
-	"context"
-	"fmt"
 	"sync"
 
 	"github.com/roosterfish/dcc-ex-go/command"
 	"github.com/roosterfish/dcc-ex-go/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 // readWriteCloserCache wraps the protocols readWriteCloser and allows caching the written commands.
@@ -49,53 +46,6 @@ func (c *Channel) Session(sessionF func(protocol protocol.ReadWriteCloser) error
 	defer c.sessionLock.Unlock()
 
 	return sessionF(c.protocol)
-}
-
-// SessionSuccess is equal to Session including an additional reader that checks for the failure op code.
-// If any invalid command is sent throughout the session this likely indicates a wrong command was sent.
-// An example is examining the status of an invalid turnout.
-func (c *Channel) SessionSuccess(ctx context.Context, sessionF func(ctx context.Context, protocol protocol.ReadWriteCloser) error) error {
-	c.sessionLock.Lock()
-	defer c.sessionLock.Unlock()
-
-	// Allows to early cancel all other routines in the errgroup.
-	// This is required in case the sessionF returned with success so we can also cancel the failure op code reader.
-	earlyCancelCtx, earlyCancel := context.WithCancel(ctx)
-
-	g, ctx := errgroup.WithContext(earlyCancelCtx)
-
-	// Ensure there is a reader before running the sessionF (any writes) to not miss any responses.
-	waiter := c.protocol.ReadOpCode(ctx, command.OpCodeFail)
-
-	g.Go(func() error {
-		<-waiter.WaitC
-		failCommand := waiter.Command()
-
-		if failCommand != nil {
-			return fmt.Errorf("observed session failure after last command %q: %q", c.protocol.lastCommand().String(), failCommand.String())
-		}
-
-		return nil
-	})
-
-	g.Go(func() error {
-		err := sessionF(ctx, c.protocol)
-		if err == nil {
-			// Cancel the failure op code reader.
-			earlyCancel()
-		}
-
-		return err
-	})
-
-	err := g.Wait()
-
-	// Only return an error if it isn't caused by an early context cancellation.
-	if err != nil && earlyCancelCtx.Err() == nil {
-		return err
-	}
-
-	return nil
 }
 
 // RSession allows having a short-term read-only session on the connection's channel to interact
