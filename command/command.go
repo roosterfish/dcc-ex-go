@@ -167,3 +167,12 @@ func (c *Command) ParametersStrings() ([]string, error) {
 
 	return parametersStrings, nil
 }
+
+// Append another command by inherting the given commands op code, format string and parameters:
+// <Z 719 719 1><E >
+// This is possible by extending the original commands format string and list of parameters.
+// It's mostly helpful to join multiple commands together and have them still represented
+// by a single command instance which can be passed down the channel/protocol.
+func (c *Command) Append(command *Command) *Command {
+	return NewCommand(c.opCode, c.format+"%s%c "+command.format, append(append(c.parameters, "><", command.OpCode()), command.parameters...)...)
+}
