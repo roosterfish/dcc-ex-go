@@ -108,42 +108,44 @@ func (c *Cab) speedUnchanged(status *CabStatus, newSpeed Speed, newDirection Dir
 
 // Speed sets the cabs speed and direction.
 // It first checks whether or not the speed and direction is already set.
-// Keep in mind that the check and change are not inside the same session.
 func (c *Cab) Speed(ctx context.Context, speed Speed, direction Direction) error {
-	// Check if already at the requested speed.
-	// There isn't a broadcast sent if the cab is already at the requested speed and direction.
-	status, err := c.Status(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
-	}
+	return c.channel.SessionContext(ctx, func(ctx context.Context) error {
+		// Check if already at the requested speed.
+		// There isn't a broadcast sent if the cab is already at the requested speed and direction.
+		status, err := c.Status(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
+		}
 
-	if c.speedUnchanged(status, speed, direction) {
-		return nil
-	}
+		if c.speedUnchanged(status, speed, direction) {
+			return nil
+		}
 
-	speedCommand := command.NewCommand(command.OpCodeCabSpeed, "%d %d %d", c.address, speed, direction)
-	return c.channel.WriteAndReadOpCode(ctx, speedCommand, command.OpCodeCabResponse, c.equalsCommandParams)
+		speedCommand := command.NewCommand(command.OpCodeCabSpeed, "%d %d %d", c.address, speed, direction)
+		return c.channel.WriteAndReadOpCode(ctx, speedCommand, command.OpCodeCabResponse, c.equalsCommandParams)
+	})
 }
 
 // Function sets the respective cab's function to either on or off.
 // It first checks whether or not the function's state is already set.
-// Keep in mind that the check and change are not inside the same session.
 func (c *Cab) Function(ctx context.Context, funct Function, state FunctionState) error {
-	// Check if the requested function already has the requested state.
-	// There isn't a broadcast sent if the function already has the requested state.
-	status, err := c.Status(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
-	}
+	return c.channel.SessionContext(ctx, func(ctx context.Context) error {
+		// Check if the requested function already has the requested state.
+		// There isn't a broadcast sent if the function already has the requested state.
+		status, err := c.Status(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
+		}
 
-	// The function map uses a bit for each func starting from LSB.
-	// The bit is 1 in case the function is already on, 0 if it is off.
-	if status.FunctMap == (uint32(state) << funct) {
-		return nil
-	}
+		// The function map uses a bit for each func starting from LSB.
+		// The bit is 1 in case the function is already on, 0 if it is off.
+		if status.FunctMap == (uint32(state) << funct) {
+			return nil
+		}
 
-	functionCommand := command.NewCommand(command.OpCodeCabFunction, "%d %d %d", c.address, funct, state)
-	return c.channel.WriteAndReadOpCode(ctx, functionCommand, command.OpCodeCabResponse, c.equalsCommandParams)
+		functionCommand := command.NewCommand(command.OpCodeCabFunction, "%d %d %d", c.address, funct, state)
+		return c.channel.WriteAndReadOpCode(ctx, functionCommand, command.OpCodeCabResponse, c.equalsCommandParams)
+	})
 }
 
 func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
