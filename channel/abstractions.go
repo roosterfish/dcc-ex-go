@@ -11,7 +11,7 @@ import (
 type ValidateF func(cmd *command.Command) error
 
 func (c *Channel) writeAndReadOpCode(ctx context.Context, cmd *command.Command, o *command.OpCode, f ValidateF) error {
-	return c.Session(func(protocol protocol.ReadWriteCloser) error {
+	sessionF := func(protocol protocol.ReadWriteCloser) error {
 		commandC, cleanupF := protocol.Read()
 		defer cleanupF()
 
@@ -45,7 +45,16 @@ func (c *Channel) writeAndReadOpCode(ctx context.Context, cmd *command.Command, 
 				return ctx.Err()
 			}
 		}
-	})
+	}
+
+	// Try to obtain an active session from the passed context.
+	// If present, don't start a new session but reuse the existing one.
+	sessionProtocol, ok := ctx.Value(sessionProtocolCtxKey).(protocol.ReadWriteCloser)
+	if !ok {
+		return c.Session(sessionF)
+	}
+
+	return sessionF(sessionProtocol)
 }
 
 // Write abstracts an underlying write session by writing the given command.
