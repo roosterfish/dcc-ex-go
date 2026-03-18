@@ -28,7 +28,7 @@ type Cab struct {
 
 type CabStatus struct {
 	SpeedByte uint8
-	FunctMap  uint8
+	FunctMap  uint32
 }
 
 const (
@@ -125,7 +125,23 @@ func (c *Cab) Speed(ctx context.Context, speed Speed, direction Direction) error
 	return c.channel.WriteAndReadOpCode(ctx, speedCommand, command.OpCodeCabResponse, c.equalsCommandParams)
 }
 
+// Function sets the respective cab's function to either on or off.
+// It first checks whether or not the function's state is already set.
+// Keep in mind that the check and change are not inside the same session.
 func (c *Cab) Function(ctx context.Context, funct Function, state FunctionState) error {
+	// Check if the requested function already has the requested state.
+	// There isn't a broadcast sent if the function already has the requested state.
+	status, err := c.Status(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
+	}
+
+	// The function map uses a bit for each func starting from LSB.
+	// The bit is 1 in case the function is already on, 0 if it is off.
+	if status.FunctMap == (uint32(state) << funct) {
+		return nil
+	}
+
 	functionCommand := command.NewCommand(command.OpCodeCabFunction, "%d %d %d", c.address, funct, state)
 	return c.channel.WriteAndReadOpCode(ctx, functionCommand, command.OpCodeCabResponse, c.equalsCommandParams)
 }
@@ -156,7 +172,7 @@ func (c *Cab) Status(ctx context.Context) (*CabStatus, error) {
 
 		status = &CabStatus{
 			SpeedByte: uint8(speedByte),
-			FunctMap:  uint8(functMap),
+			FunctMap:  uint32(functMap),
 		}
 
 		return nil
