@@ -83,40 +83,42 @@ func (t *TurnoutServo) equalsCommandParams(cmd *command.Command) error {
 
 // Throw throws the servo turnout.
 // It first checks whether or not the turnout is already thrown.
-// Keep in mind that the check and actual throw are not inside the same session.
 func (t *TurnoutServo) Throw(ctx context.Context) error {
-	// Check if already thrown.
-	// There isn't a broadcast sent if the turnout is already thrown.
-	status, err := t.Examine(ctx)
-	if err != nil {
-		return err
-	}
+	return t.channel.SessionContext(ctx, func(ctx context.Context) error {
+		// Check if already thrown.
+		// There isn't a broadcast sent if the turnout is already thrown.
+		status, err := t.Examine(ctx)
+		if err != nil {
+			return err
+		}
 
-	if status.State == StateThrown {
-		return nil
-	}
+		if status.State == StateThrown {
+			return nil
+		}
 
-	stateCommand := t.setStateCommand(StateThrown)
-	return t.channel.WriteAndReadOpCode(ctx, stateCommand, command.OpCodeTurnoutResponse, t.equalsCommandParams)
+		stateCommand := t.setStateCommand(StateThrown)
+		return t.channel.WriteAndReadOpCode(ctx, stateCommand, command.OpCodeTurnoutResponse, t.equalsCommandParams)
+	})
 }
 
 // Close closes the servo turnout.
 // It first checks whether or not the turnout is already closed.
-// Keep in mind that the check and actual close are not inside the same session.
 func (t *TurnoutServo) Close(ctx context.Context) error {
-	// Check if already closed.
-	// There isn't a broadcast sent if the turnout is already closed.
-	status, err := t.Examine(ctx)
-	if err != nil {
-		return err
-	}
+	return t.channel.SessionContext(ctx, func(ctx context.Context) error {
+		// Check if already closed.
+		// There isn't a broadcast sent if the turnout is already closed.
+		status, err := t.Examine(ctx)
+		if err != nil {
+			return err
+		}
 
-	if status.State == StateClosed {
-		return nil
-	}
+		if status.State == StateClosed {
+			return nil
+		}
 
-	stateCommand := t.setStateCommand(StateClosed)
-	return t.channel.WriteAndReadOpCode(ctx, stateCommand, command.OpCodeTurnoutResponse, t.equalsCommandParams)
+		stateCommand := t.setStateCommand(StateClosed)
+		return t.channel.WriteAndReadOpCode(ctx, stateCommand, command.OpCodeTurnoutResponse, t.equalsCommandParams)
+	})
 }
 
 // Examine returns the status of the servo.
