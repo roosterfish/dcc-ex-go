@@ -8,6 +8,8 @@ import (
 	"github.com/roosterfish/dcc-ex-go/protocol"
 )
 
+const sessionProtocolCtxKey = "session-protocol"
+
 type WriteF func(ctx context.Context, command *command.Command) error
 
 type Channel struct {
@@ -34,6 +36,23 @@ func (c *Channel) Session(sessionF func(protocol protocol.ReadWriteCloser) error
 	defer c.sessionLock.Unlock()
 
 	return sessionF(c.protocol)
+}
+
+// SessionContext allows using a session to run multiple commands exclusively in succession.
+// The context passed into function f contains the channels underlying protocol.
+// Calling any of the other channel abstraction functions within function f ensures the session is derived
+// from the passed context.
+// With this, atomic operations can be implemented which first require reading some content and then performing
+// an action based on the read values.
+func (c *Channel) SessionContext(ctx context.Context, f func(ctx context.Context) error) error {
+	c.sessionLock.Lock()
+	defer c.sessionLock.Unlock()
+
+	ctx = context.WithValue(ctx, sessionProtocolCtxKey, c.protocol)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	return f(ctx)
 }
 
 // RSession allows having a short-term read-only session on the connection's channel to interact with the underlying protocol.
