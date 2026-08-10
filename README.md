@@ -1,7 +1,7 @@
 # dcc-ex-go
 
-This module contains Go bindings for the [DCC-EX](https://dcc-ex.com) native command protocol.
-It implements the commands outlined in the [summary](https://dcc-ex.com/reference/software/command-summary-consolidated.html) and
+This module contains a Go implementation of the [DCC-EX](https://dcc-ex.com) native command protocol.
+It materializes the commands outlined in the [summary](https://dcc-ex.com/reference/software/command-summary-consolidated.html) and
 uses Go's language features to easily interact with the various entities available in the [DCC-EX CommandStation](https://dcc-ex.com/ex-commandstation/index.html).
 
 Control your trains, sensors, outputs and turnouts in DCC-EX using Go.
