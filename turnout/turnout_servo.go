@@ -132,7 +132,7 @@ func (t *TurnoutServo) Examine(ctx context.Context) (*TurnoutServoStatus, error)
 		}
 
 		if len(params) != 7 {
-			return fmt.Errorf("invalid turnout servo command parameter length %q", len(params))
+			return fmt.Errorf("invalid turnout servo command parameter length %d", len(params))
 		}
 
 		vPin, err := strconv.ParseUint(params[2], 10, 16)
