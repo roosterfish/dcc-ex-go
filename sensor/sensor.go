@@ -96,11 +96,11 @@ func (s *Sensor) WaitConsistent(ctx context.Context, state State, duration time.
 		for {
 			select {
 			case cmd := <-commandC:
-				cmdStr := cmd.String()
-				if cmdStr == stateCommand {
+				switch cmd.String() {
+				case stateCommand:
 					// In case the requested state was observed reset the expired timer.
 					_ = timer.Reset(duration)
-				} else if cmdStr == oppositeStateCommand {
+				case oppositeStateCommand:
 					// In case the opposite state was observed stop the timer.
 					_ = timer.Stop()
 				}
