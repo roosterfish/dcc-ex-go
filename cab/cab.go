@@ -114,7 +114,7 @@ func (c *Cab) Speed(ctx context.Context, speed Speed, direction Direction) error
 		// There isn't a broadcast sent if the cab is already at the requested speed and direction.
 		status, err := c.Status(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
+			return fmt.Errorf("failed to get status of cab %d: %w", c.address, err)
 		}
 
 		if c.speedUnchanged(status, speed, direction) {
@@ -134,7 +134,7 @@ func (c *Cab) Function(ctx context.Context, funct Function, state FunctionState)
 		// There isn't a broadcast sent if the function already has the requested state.
 		status, err := c.Status(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get status of cab %q: %w", c.address, err)
+			return fmt.Errorf("failed to get status of cab %d: %w", c.address, err)
 		}
 
 		// The function map uses a bit for each func starting from LSB.
