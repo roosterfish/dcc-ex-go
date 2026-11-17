@@ -68,7 +68,7 @@ func NewConnection(config *Config) (*Connection, error) {
 func (c *Connection) open() (io.ReadWriteCloser, error) {
 	port, err := serial.Open(c.config.Device, c.config.Mode)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open %q: %w", c.config.Device, err)
+		return nil, fmt.Errorf("failed to open %q: %w", c.config.Device, err)
 	}
 
 	return port, nil
