@@ -8,14 +8,16 @@ import (
 	"github.com/roosterfish/dcc-ex-go/protocol"
 )
 
-const sessionProtocolCtxKey = "session-protocol"
-
 type WriteF func(ctx context.Context, command *command.Command) error
 
 type Channel struct {
 	protocol    protocol.ReadWriteCloser
 	sessionLock sync.Mutex
 }
+
+type sessionKey string
+
+const sessionProtocolCtxKey sessionKey = "session-protocol"
 
 // NewChannel returns a new channel using the given protocol.
 func NewChannel(protocol protocol.ReadWriteCloser) *Channel {
