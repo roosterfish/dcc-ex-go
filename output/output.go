@@ -88,7 +88,7 @@ func (o *Output) Status(ctx context.Context) (*Status, error) {
 		}
 
 		if len(params) != 4 {
-			return fmt.Errorf("invalid output command parameter length %q", len(params))
+			return fmt.Errorf("invalid output command parameter length %d", len(params))
 		}
 
 		if params[0] != strconv.FormatUint(uint64(o.id), 10) {
