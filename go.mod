@@ -1,6 +1,6 @@
 module github.com/roosterfish/dcc-ex-go
 
-go 1.23.4
+go 1.27.4
 
 require (
 	github.com/google/uuid v1.6.0
