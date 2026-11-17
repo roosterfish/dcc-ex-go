@@ -138,7 +138,7 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 		}
 
 		if len(params) != 7 {
-			return fmt.Errorf("invalid command station command parameter length %q", len(params))
+			return fmt.Errorf("invalid command station command parameter length %d", len(params))
 		}
 
 		status = &Status{
@@ -173,7 +173,7 @@ func (c *CommandStation) SupportedCabs(ctx context.Context) (int, error) {
 		}
 
 		if len(params) != 1 {
-			return fmt.Errorf("invalid supported cabs command parameter length %q", len(params))
+			return fmt.Errorf("invalid supported cabs command parameter length %d", len(params))
 		}
 
 		supportedCabsResponse, err := strconv.Atoi(params[0])
