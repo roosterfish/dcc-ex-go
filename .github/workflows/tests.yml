@@ -83,3 +83,6 @@ jobs:
       - name: Run DCC-EX simulator
         run: |
           ./dccex-sim CommandStation-EX/.pio/build/mega2560/firmware.elf &
+
+      - name: Run integration tests
+        run: make integration
