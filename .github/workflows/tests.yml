@@ -35,3 +35,54 @@ jobs:
 
       - name: Unit tests
         run: make unit
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-26.04
+    needs:
+      - code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libelf-dev gcc-avr avr-libc
+
+      - name: Build DCC-EX firmware
+        run: |
+          git clone https://github.com/DCC-EX/CommandStation-EX
+          cp tests/dcc-ex/config.h CommandStation-EX/config.h
+
+          # Setup venv.
+          python3 -m venv /tmp/venv
+          source /tmp/venv/bin/activate
+          pip install platformio
+
+          cd CommandStation-EX && python3 -m platformio run -e mega2560
+          deactivate
+
+      - name: Build simavr
+        run: |
+          git clone https://github.com/buserror/simavr.git
+          git -C simavr checkout v1.8
+          sudo make -C simavr install-simavr RELEASE=1
+          sudo ldconfig
+          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+
+          # Build the simulator.
+          cc -O2 -std=gnu99 \
+            $(pkg-config --cflags simavr) \
+            -Isimavr/examples/parts \
+            tests/simavr/dccex-sim.c simavr/examples/parts/uart_pty.c \
+            -o dccex-sim \
+            $(pkg-config --libs simavr) \
+            -pthread -lutil -lm
+
+      - name: Run DCC-EX simulator
+        run: |
+          ./dccex-sim CommandStation-EX/.pio/build/mega2560/firmware.elf &
+
+      - name: Run integration tests
+        run: make integration
