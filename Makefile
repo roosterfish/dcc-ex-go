@@ -6,3 +6,6 @@ endif
 
 unit:
 	go test ./...
+
+integration:
+	go test -v -tags=integration ./...
