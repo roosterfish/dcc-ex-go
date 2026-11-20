@@ -137,8 +137,8 @@ func (c *CommandStation) Status(ctx context.Context) (*Status, error) {
 			return fmt.Errorf("failed getting command station command parameters: %w", err)
 		}
 
-		if len(params) != 7 {
-			return fmt.Errorf("invalid command station command parameter length %d", len(params))
+		if len(params) < 7 {
+			return fmt.Errorf("invalid command station command parameter length %d (%+v)", len(params), params)
 		}
 
 		status = &Status{
